@@ -5,8 +5,12 @@ Require Import VST.veric.base.
 
 Require Import compcert.cfrontend.Ctypes. 
 
-(* TODO: This is obviously true. Ask Xavior to remove the definition list_norepet.*)
-Axiom list_norepet_NoDup: forall {A: Type} (l: list A), list_norepet l <-> NoDup l.
+(* TODO: Ask Xavior to remove the definition list_norepet.*)
+Lemma list_norepet_NoDup: forall {A: Type} (l: list A), list_norepet l <-> NoDup l.
+Proof. induction l; split; intros; try solve [constructor].
+inv H. econstructor; [ trivial | apply IHl; trivial]. 
+inv H. econstructor; [ trivial | apply IHl; trivial]. 
+Qed.
 
 Lemma PTree_In_fst_elements {A: Type}: forall (T: PTree.t A) i,
   In i (map fst (PTree.elements T)) <-> exists a, PTree.get i T = Some a.
