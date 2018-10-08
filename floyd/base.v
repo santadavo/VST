@@ -1,14 +1,30 @@
 From compcert Require Export Clightdefs.
-Require Export veric.SeparationLogic.
-Require Export msl.Extensionality.
-Require Export compcert.lib.Coqlib msl.Coqlib2 veric.coqlib4 floyd.coqlib3.
-Require Export floyd.jmeq_lemmas.
-Require Export veric.juicy_extspec.
-Require veric.SeparationLogicSoundness.
-Export SeparationLogicSoundness.SoundSeparationLogic.CSL.
-Require Import veric.NullExtension.
+Require Export VST.veric.base.
+Require Export VST.veric.SeparationLogic.
+Require Export VST.msl.Extensionality.
+Require Export compcert.lib.Coqlib.
+Require Export VST.msl.Coqlib2 VST.veric.coqlib4 VST.floyd.coqlib3.
+Require Export VST.veric.juicy_extspec.
+Require Import VST.veric.NullExtension.
+Require Export VST.floyd.jmeq_lemmas.
+Require Export VST.floyd.find_nth_tactic.
+Require Export VST.floyd.val_lemmas.
+Require Export VST.floyd.assert_lemmas.
+Require VST.floyd.SeparationLogicAsLogicSoundness.
+Export SeparationLogicAsLogicSoundness.MainTheorem.
+Export SeparationLogicAsLogicSoundness.MainTheorem.CSHL_PracticalLogic.
+Export SeparationLogicAsLogicSoundness.MainTheorem.CSHL_PracticalLogic.CSHL_MinimumLogic.
+Export SeparationLogicAsLogicSoundness.MainTheorem.CSHL_PracticalLogic.CSHL_MinimumLogic.CSHL_Def.
+Export SeparationLogicAsLogicSoundness.MainTheorem.CSHL_PracticalLogic.CSHL_MinimumLogic.CSHL_Defs.
 
 Local Open Scope logic.
+
+Definition extract_exists_pre:
+  forall {CS: compspecs} {Espec: OracleKind},
+  forall (A : Type) (P : A -> environ->mpred) c (Delta: tycontext) (R: ret_assert),
+  (forall x, @semax CS Espec Delta (P x) c R) ->
+   @semax CS Espec Delta (EX x:A, P x) c R
+  := @semax_extract_exists.
 
 Arguments alignof_two_p {env} t.
 
@@ -108,6 +124,47 @@ Proof.
 Qed.
 
 End GET_CO.
+
+Lemma co_members_get_co_change_composite {cs_from cs_to} {CCE: change_composite_env cs_from cs_to}: forall id,
+  match (coeq cs_from cs_to) ! id with
+  | Some b => test_aux cs_from cs_to b id
+  | None => false
+  end = true ->
+  co_members (@get_co cs_from id) = co_members (@get_co cs_to id).
+Proof.
+  intros.
+  destruct ((@cenv_cs cs_to) ! id) eqn:?H.
+  + pose proof proj1 (coeq_complete _ _ id) (ex_intro _ c H0) as [b ?].
+    rewrite H1 in H.
+    apply (coeq_consistent _ _ id _ _ H0) in H1.
+    unfold test_aux in H.
+    destruct b; [| inv H].
+    rewrite !H0 in H.
+    destruct ((@cenv_cs cs_from) ! id) eqn:?H; [| inv H].
+    simpl in H.
+    rewrite !andb_true_iff in H.
+    destruct H as [[? _] _].
+    apply eqb_list_spec in H; [| apply eqb_member_spec].
+    unfold get_co; rewrite H0, H2.
+    auto.
+  + destruct ((coeq cs_from cs_to) ! id) eqn:?H.
+    - pose proof proj2 (coeq_complete _ _ id) (ex_intro _ b H1) as [co ?].
+      congruence.
+    - inv H.
+Qed.
+
+Lemma co_sizeof_get_co_change_composite {cs_from cs_to} {CCE: change_composite_env cs_from cs_to}: forall id,
+  match (coeq cs_from cs_to) ! id with
+  | Some b => test_aux cs_from cs_to b id
+  | None => false
+  end = true ->
+  co_sizeof (@get_co cs_from id) = co_sizeof (@get_co cs_to id).
+Proof.
+  intros.
+  rewrite <- !sizeof_Tstruct with (a := noattr).
+  apply sizeof_change_composite.
+  auto.
+Qed.
 
 Definition member_dec: forall (it0 it1: ident * type), {it0 = it1} + {it0 <> it1}.
   intros.

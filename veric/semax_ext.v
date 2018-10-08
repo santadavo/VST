@@ -1,13 +1,18 @@
-Require Import veric.juicy_base.
-Require Import veric.juicy_mem.
-Require Import veric.juicy_mem_lemmas.
-Require Import veric.juicy_mem_ops.
-Require Import sepcomp.extspec.
-Require Import veric.juicy_extspec.
-Require Import veric.tycontext.
-Require Import veric.expr2.
-Require Import veric.semax.
-Require Import veric.semax_call.
+Require Import VST.veric.juicy_base.
+Require Import VST.veric.juicy_mem.
+Require Import VST.veric.juicy_mem_lemmas.
+Require Import VST.veric.juicy_mem_ops.
+Require Import VST.sepcomp.extspec.
+Require Import VST.veric.juicy_extspec.
+Require Import VST.veric.tycontext.
+Require Import VST.veric.expr2.
+Require Import VST.veric.semax.
+Require Import VST.veric.semax_call.
+Require Import VST.veric.res_predicates.
+
+Require Import VST.veric.res_predicates.
+Require Import compcert.cfrontend.Clight.
+Require Import compcert.exportclight.Clightdefs.
 
 Definition funsig2signature (s : funsig) cc : signature :=
   mksignature (map typ_of_type (map snd (fst s))) (opttyp_of_type (snd s)) cc.
@@ -28,8 +33,51 @@ Variable Z : Type.
 
 Variable Espec : juicy_ext_spec Z.
 
-Parameter symb2genv : forall (ge_s : PTree.t block), genv. (*TODO*)
-Axiom symb2genv_ax : forall (ge_s : PTree.t block), Genv.genv_symb (symb2genv ge_s) = ge_s.
+Definition symb2genv_upper_bound (s: PTree.t block) : block :=
+  Pos.succ (fold_right Pos.max  1%positive (map snd (PTree.elements s))).
+
+Definition symb2genv (ge_s: injective_PTree block) : genv.
+    refine (Build_genv (@Genv.mkgenv _ _ nil (proj1_sig ge_s) (PTree.empty _) (symb2genv_upper_bound (proj1_sig ge_s)) _ _ _) (PTree.empty _)).
+*
+intros.
+unfold Coqlib.Plt.
+apply Pos.lt_le_trans with (Pos.succ b).
+apply Pos.lt_succ_r.
+apply Pos.le_refl.
+unfold symb2genv_upper_bound.
+apply -> Pos.succ_le_mono.
+apply PTree.elements_correct in H.
+revert H.
+induction (PTree.elements (proj1_sig ge_s)); intros. inv H.
+destruct H. subst. simpl.
+apply Pos.le_max_l.
+simpl.
+eapply Pos.le_trans; [  | apply Pos.le_max_r].
+auto.
+*
+intros.
+rewrite PTree.gempty in H. inv H.
+*
+intros.
+destruct ge_s; simpl in *.
+revert id1 id2 b H H0.
+simpl.
+auto.
+Defined.
+
+Lemma symb2genv_ax' : forall (ge_s : injective_PTree block), genv_symb_injective (symb2genv ge_s) = ge_s.
+Proof.
+intros.
+destruct ge_s.
+unfold genv_symb_injective.
+f_equal.
+Qed.
+
+Lemma symb2genv_ax : forall (ge: genv), Genv.genv_symb (symb2genv (genv_symb_injective ge)) = Genv.genv_symb ge.
+Proof.
+intros.
+reflexivity.
+Qed.
 
 (* Making this particular instance of EqDec opaque *)
 Lemma oi_eq_dec : forall a a' : option (ident * signature), { a = a' } + { a <> a' }.
@@ -40,7 +88,7 @@ Qed.
 
 Definition funspec2pre (ext_link: Strings.String.string -> ident) (A : TypeTree)
   (P: forall ts, dependent_type_functor_rec ts (AssertTT A) mpred)
-  (ids: list ident) (id: ident) (sig : signature) (ef: external_function) x ge_s
+  (ids: list ident) (id: ident) (sig : signature) (ef: external_function) x (ge_s: injective_PTree block)
            (tys : list typ) args (z : Z) m : Prop :=
   match oi_eq_dec (Some (id, sig)) (ef_id_sig ext_link ef) as s
   return ((if s then (rmap* (sigT (fun ts => dependent_type_functor_rec ts A mpred)))%type else ext_spec_type Espec ef) -> Prop)
@@ -75,8 +123,6 @@ Definition funspec2extspec (ext_link: Strings.String.string -> ident) (f : (iden
         (funspec2post ext_link A Q id sig)
         (fun rv z m => False)
   end.
-
-Require Import veric.res_predicates.
 
 Local Open Scope pred.
 
@@ -345,15 +391,15 @@ intros n ge Ts x n0 Hlater F ts args jm H jm' H2 [Hargsty H3].
 destruct H3 as [s [t [Hjoin [Hp Hf]]]].
 destruct Espec.
 
-assert (Hp'': P Ts x (make_ext_args (filter_genv (symb2genv (Genv.genv_symb ge)))
+assert (Hp'': P Ts x (make_ext_args (filter_genv (symb2genv (genv_symb_injective ge)))
                                  (fst (split (fst sig))) args) s).
 { generalize (all_funspecs_wf f) as Hwf2; intro.
-  spec Hwf2 Ts x ge (symb2genv (Genv.genv_symb ge)) (fst (split (fst sig))) args.
+  specialize (Hwf2 Ts x ge (symb2genv (genv_symb_injective ge)) (fst (split (fst sig))) args).
   spec Hwf2.
   rewrite symb2genv_ax; auto.
   apply Hwf2; auto. }
 
-destruct (@add_funspecs_pre ext_link _ _ _ _ _ _ _ _ _ _ (existT _ Ts x) _ _ OK_spec ts (Genv.genv_symb ge) s t Hnorepeat Hin Hjoin Hargsty Hp'')
+destruct (@add_funspecs_pre ext_link _ _ _ _ _ _ _ _ _ _ (existT _ Ts x) _ _ OK_spec ts (genv_symb_injective ge) s t Hnorepeat Hin Hjoin Hargsty Hp'')
   as [x' [Heq Hpre]].
 simpl.
 exists x'.
@@ -399,15 +445,15 @@ unfold semax_external.
 intros n ge Ts x n0 Hlater F ts args jm H jm' H2 [Hargsty H3].
 destruct H3 as [s [t [Hjoin [Hp Hf]]]].
 destruct Espec.
-assert (Hp'': P Ts x (make_ext_args (filter_genv (symb2genv (Genv.genv_symb ge)))
+assert (Hp'': P Ts x (make_ext_args (filter_genv (symb2genv (genv_symb_injective ge)))
                                  (fst (split sig)) args) s).
 { generalize (all_funspecs_wf f) as Hwf2; intro.
-  spec Hwf2 Ts x ge (symb2genv (Genv.genv_symb ge)) (fst (split sig)) args.
+  specialize (Hwf2 Ts x ge (symb2genv (genv_symb_injective ge)) (fst (split sig)) args).
   spec Hwf2.
   rewrite symb2genv_ax; auto.
   apply Hwf2; auto. }
 
-destruct (@add_funspecs_pre_void ext_link _ _ _ _ _ _ _ _ _ _ (existT _ Ts x) _ _ OK_spec ts (Genv.genv_symb ge) s t Hnorepeat Hin Hjoin Hargsty Hp'')
+destruct (@add_funspecs_pre_void ext_link _ _ _ _ _ _ _ _ _ _ (existT _ Ts x) _ _ OK_spec ts (genv_symb_injective ge) s t Hnorepeat Hin Hjoin Hargsty Hp'')
   as [x' [Heq Hpre]].
 simpl.
 exists x'.

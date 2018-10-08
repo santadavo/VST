@@ -1,9 +1,9 @@
 Require Import mailbox.verif_atomic_exchange.
-Require Import veric.rmaps.
-Require Import progs.conclib.
-Require Import progs.ghost.
-Require Import floyd.library.
-Require Import floyd.sublist.
+Require Import VST.veric.rmaps.
+Require Import VST.progs.conclib.
+Require Import VST.progs.ghost.
+Require Import VST.floyd.library.
+Require Import VST.floyd.sublist.
 Require Import mailbox.lock.
 
 Set Bullet Behavior "Strict Subproofs".
@@ -162,7 +162,7 @@ Proof.
   eapply semax_pre with (P' := EX z : Z, PROP (repable_signed z) LOCAL (temp _r (vint z); temp _l p; temp _ll l)
     SEP (my_lock sh l p g R; if eq_dec z 0 then R else emp)).
   { Exists 1; entailer!. }
-  eapply semax_loop; [|forward; apply drop_tc_environ].
+  eapply semax_loop; [|forward; apply ENTAIL_refl].
   - Intros z.
     forward_if (PROP () LOCAL (temp _r (vint z); temp _l p; temp _ll l) SEP (my_lock sh l p g R)).
     + forward.
@@ -171,7 +171,7 @@ Proof.
     + forward.
       assert (z = 0).
       { apply repr_inj_signed; auto. }
-      subst; rewrite eq_dec_refl; apply drop_tc_environ.
+      subst; rewrite eq_dec_refl; apply ENTAIL_refl.
     + unfold my_lock; Intros h.
       forward_call (sh, p, g, l, vint 1, vint 1, h, fun (h : hist) (v : val) => !!(v = vint 1) && emp,
         lock_R R,

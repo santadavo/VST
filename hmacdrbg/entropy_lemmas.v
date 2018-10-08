@@ -1,4 +1,4 @@
-Require Import Coqlib.
+Require Import compcert.lib.Coqlib.
 Require Import List. Import ListNotations.
 Require Import hmacdrbg.entropy.
 Require Import Coq.Logic.FunctionalExtensionality.
@@ -81,7 +81,7 @@ Qed.
 Lemma get_bits_stream_error:
   forall k s e s',
     ENTROPY.error e s' = ENTROPY.get_bits k s ->
-    (exists i, (i < k)%nat /\ (forall i', s' i' = match nat_compare i' i with
+    (exists i, (i < k)%nat /\ (forall i', s' i' = match Nat.compare i' i with
                                    | Lt => s i'
                                    | Eq | Gt => s (S i')
                                  end) /\ s i = None /\ (forall i', (i' < i)%nat -> s i' <> None)).
@@ -168,15 +168,4 @@ Proof.
   erewrite get_bytes_length.
   rewrite Z2Nat.id; [reflexivity | omega].
   eauto.
-Qed.
-
-Lemma get_bytes_isbyteZ:
-  forall k s b s',
-    ENTROPY.success b s' = ENTROPY.get_bytes k s ->
-    Forall isbyteZ b.
-Proof.
-  intros.
-  unfold ENTROPY.get_bytes in H.
-  destruct (ENTROPY.get_bits (8 * k) s); inv H.
-  eapply bitsToBytes_isbyteZ; reflexivity.
 Qed.

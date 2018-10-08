@@ -18,6 +18,7 @@ Definition Tend (S: Type) (A: Type) :=
           (fun f _ => f)
           (fun f => f (fun _: S => tt)).
 
+Set Warnings "-projection-no-head-constant".
 Canonical Structure Tarrow (A: Type) (H: Lift) :=
     mkLift (lift_S H)
       (A -> lift_T H)
@@ -26,6 +27,7 @@ Canonical Structure Tarrow (A: Type) (H: Lift) :=
       ((lift_S H -> A) -> lifted H)
       (fun f x => match x with (x1,x2) => lift_curry H (f x1) x2 end)
       (fun f x => lift_uncurry_open H (fun y: lift_S H -> lift_prod H => f (fun z => (x z, y z)))).
+Set Warnings "+projection-no-head-constant".
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -67,7 +69,7 @@ Tactic Notation "unfold_lift" "in" "*" :=
 
 (* The reason for writing   liftx(x : _) instead
   of just (liftx x)  is to get the case  `(fun v => ..v...) to work *)
-Notation "'`' x" := (liftx x) (at level 9).
+Notation "'`' x" := (liftx x) (at level 10, x at next level). (* use level 10 for compatibility with coq/Theories/Program/Utils.v *)
 Notation "'`(' x ')'" := (liftx (x : _)).
 
 (*  EXAMPLES OF USE

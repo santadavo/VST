@@ -1,4 +1,4 @@
-Require Import floyd.proofauto.
+Require Import VST.floyd.proofauto.
 Require Import hmacdrbg.HMAC_DRBG_algorithms.
 Require Import hmacdrbg.HMAC_DRBG_common_lemmas.
 Require Import hmacdrbg.spec_hmac_drbg.
@@ -12,12 +12,10 @@ Proof. intros.
 Qed.
 
 Lemma hmac_interp_empty d r: hmac_interp d r |-- md_empty r.
-destruct d; simpl. trivial.
-+ destruct h. simpl.
-  eapply derives_trans.
-  apply UNDER_SPEC.REP_FULL.
-  apply UNDER_SPEC.FULL_EMPTY.
-+ apply UNDER_SPEC.FULL_EMPTY.
+Proof.
+destruct d; simpl. auto.
+eapply derives_trans. apply md_relate_full. apply md_full_empty.
+apply md_full_empty.
 Qed.
 
 Lemma instantiate256_reseed d s pr_flag rc ri (ZLc'256F : (Zlength d >? 256) = false):

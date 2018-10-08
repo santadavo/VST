@@ -3,14 +3,14 @@ Require Import compcert.lib.Integers.
 Require Coq.Strings.String.
 Require Coq.Strings.Ascii.
 Require Import compcert.lib.Coqlib.
-Require Import msl.Coqlib2.
-Require Import floyd.coqlib3.
-Require Import floyd.sublist.
+Require Import VST.msl.Coqlib2.
+Require Import VST.floyd.coqlib3.
+Require Import VST.floyd.sublist.
 Require Import List. Import ListNotations.
 Require Import sha.general_lemmas.
 Require Import sha.SHA256.
 
-(* FAST FUNCTIONAL VERSION OF SHA256 *)
+(* LINEAR-TIME FUNCTIONAL VERSION OF SHA256 *)
 Function zeros (n : Z) {measure Z.to_nat n} : list Int.int :=
  if Z.gtb n 0 then Int.zero :: zeros (n-1) else nil.
 Proof.
@@ -26,16 +26,16 @@ Definition padlen (n: Z) : list Int.int :=
     in let q := (p+15)/16*16 - p   (* number of zero-pad words *)
       in zeros q ++ [Int.repr (n * 8 / Int.modulus); Int.repr (n * 8)].
 
-Fixpoint generate_and_pad' (n: list Z) len : list Int.int :=
+Fixpoint generate_and_pad' (n: list byte) len : list Int.int :=
   match n with
-  | nil => Z_to_Int 128 0 0 0 :: padlen len
-  | [h1]=> Z_to_Int h1 128 0 0 :: padlen (len+1)
-  | [h1; h2] => Z_to_Int h1 h2 128 0 :: padlen (len+2)
-  | [h1; h2; h3] => Z_to_Int h1 h2 h3 128 :: padlen (len+3)
-  | h1::h2::h3::h4::t => Z_to_Int h1 h2 h3 h4 :: generate_and_pad' t (len+4)
+  | nil => bytes_to_Int (Byte.repr 128) Byte.zero Byte.zero Byte.zero :: padlen len
+  | [h1]=> bytes_to_Int h1 (Byte.repr 128) Byte.zero Byte.zero :: padlen (len+1)
+  | [h1; h2] => bytes_to_Int h1 h2 (Byte.repr 128) Byte.zero :: padlen (len+2)
+  | [h1; h2; h3] => bytes_to_Int h1 h2 h3 (Byte.repr 128) :: padlen (len+3)
+  | h1::h2::h3::h4::t => bytes_to_Int h1 h2 h3 h4 :: generate_and_pad' t (len+4)
   end.
 
-Definition generate_and_pad_alt (n: list Z) : list Int.int :=
+Definition generate_and_pad_alt (n: list byte) : list Int.int :=
    generate_and_pad' n 0.
 
 Definition Wnext (msg : list int) : int :=
@@ -95,15 +95,15 @@ Proof.
   omega.
 Defined.
 
-Definition SHA_256' (str : list Z) : list Z :=
-    intlist_to_Zlist (process_msg init_registers (generate_and_pad_alt str)).
+Definition SHA_256' (str : list byte) : list byte :=
+    intlist_to_bytelist (process_msg init_registers (generate_and_pad_alt str)).
 
 (*EXAMPLES*)
 
-Fixpoint listZ_eq (al bl: list Z) : bool :=
+Fixpoint bytelist_eq (al bl: list byte) : bool :=
  match al, bl with
  | nil, nil => true
- | a::al', b::bl' => Z.eqb a b && listZ_eq al' bl'
+ | a::al', b::bl' => Byte.eq a b && bytelist_eq al' bl'
  | _, _ => false
   end.
 
@@ -113,18 +113,18 @@ Definition hexdigit(a: Z) : Z :=
  else if Z.leb 97 a && Z.ltb a 103 then Z.sub a 87
  else 0%Z.
 
-Fixpoint hexstring_to_Zlist (s: String.string): list Z  :=
+Fixpoint hexstring_to_bytelist (s: String.string): list byte  :=
  match s with
- | String.String a (String.String b r) =>  (hexdigit (Z.of_N (Ascii.N_of_ascii a)) * 16
-                                         + hexdigit (Z.of_N (Ascii.N_of_ascii b)))
-                                          :: hexstring_to_Zlist r
+ | String.String a (String.String b r) => Byte.repr ((hexdigit (Z.of_N (Ascii.N_of_ascii a)) * 16
+                                         + hexdigit (Z.of_N (Ascii.N_of_ascii b))))
+                                          :: hexstring_to_bytelist r
  | _ => nil
  end.
 
 Section CHECKS.
 Import String.
 Definition check m h :=
-  listZ_eq (SHA_256' (str_to_Z m)) (hexstring_to_Zlist h) = true.
+  bytelist_eq (SHA_256' (str_to_bytes m)) (hexstring_to_bytelist h) = true.
 
 (*This input message is 344 bits long, which would have one message block after padding*)
 Goal  check   "The quick brown fox jumps over the lazy dog"
@@ -141,7 +141,7 @@ End CHECKS.
     FUNCTIONAL SPECIFICATION *)
 
 Require Import sha.common_lemmas.
-Require Import msl.Coqlib2.
+Require Import VST.msl.Coqlib2.
 
 Local Open Scope nat.
 
@@ -271,9 +271,10 @@ rewrite H1.
 clear H1.
 pose proof (firstn_length i b).
 rewrite min_l in H1.
-Focus 2.
+2:{
 clear - H0; revert b H0; induction i; destruct b; simpl; intros; inv H0; try omega.
 specialize (IHi _ H1). omega.
+}
 rewrite <- H1 in H.
 clear H0 H1.
 revert K' k H regs; induction (firstn i b); destruct K'; simpl; intros; inv H.
@@ -383,8 +384,8 @@ symmetry.
 apply Z.gtb_lt; omega.
 Qed.
 
-Lemma intlist_to_Zlist_zeros:
-  forall n:Z, intlist_to_Zlist (zeros n) = map Int.unsigned (zeros (4*n))%Z.
+Lemma intlist_to_bytelist_zeros:
+  forall n:Z, intlist_to_bytelist (zeros n) = map Byte.repr (map Int.unsigned (zeros (4*n)%Z)).
 Proof.
 intro.
 destruct (zlt n 0).
@@ -394,7 +395,7 @@ induction (Z.to_nat n).
 simpl; auto.
 rewrite inj_S.
 rewrite zeros_Zsucc by omega.
-unfold intlist_to_Zlist; fold intlist_to_Zlist.
+unfold intlist_to_bytelist; fold intlist_to_bytelist.
 unfold Z.succ.
 rewrite Z.add_comm.
 rewrite Z.mul_add_distr_l.
@@ -433,7 +434,7 @@ omega.
 Qed.
 
 Lemma length_generate_and_pad'':
-  forall (l: list Z) (k: Z),
+  forall (l: list byte) (k: Z),
      k >= 0 ->
      k + Zlength (generate_and_pad' l (k*4)) = roundup (((k*4+Zlength l)+12)/4) 16.
 Proof.
@@ -519,7 +520,7 @@ omega.
 Qed.
 
 Lemma length_generate_and_pad':
-  forall (l: list Z),
+  forall (l: list byte),
      Zlength (generate_and_pad' l 0) = roundup ((Zlength l +12)/4) 16.
 Proof.
 intros.
@@ -545,7 +546,7 @@ Lemma generate_and_pad'_eq:
 Proof.
 extensionality msg.
 unfold generate_and_pad,  generate_and_pad_alt.
-match goal with |- context [Zlist_to_intlist ?A] =>
+match goal with |- context [bytelist_to_intlist ?A] =>
   remember A as PADDED eqn:HP
 end.
 assert (Nat.divide 4 (length PADDED)). {
@@ -560,7 +561,7 @@ simpl length.
 symmetry.
 transitivity (Z.to_nat (roundup (Zlength msg + 9) 64 / 4 - 2) * Z.to_nat 4)%nat; [reflexivity |].
 rewrite <- Z2Nat.inj_mul; try omega.
-Focus 2. {
+2:{
 assert (roundup (Zlength msg + 9) 64 / 4 >= (Zlength msg + 9) / 4)
  by (apply Z_div_ge; omega).
 assert ((Zlength msg + 9) / 4 = (Zlength msg + 1)/4 + 2).
@@ -569,17 +570,18 @@ rewrite Z_div_plus_full by omega.
 auto.
 assert (0 <= (Zlength msg + 1)/4).
 apply Z.div_pos;  omega.
-omega. } Unfocus.
+omega. } 
 rewrite Z.mul_sub_distr_r.
 replace (roundup (Zlength msg + 9) 64 / 4 * 4) with
   (roundup (Zlength msg + 9) 64).
-Focus 2.
+2:{
 unfold roundup.
 forget ((Zlength msg + 9 + (64 - 1)) / 64 ) as N.
 change 64 with (16 * 4).
 rewrite Z.mul_assoc.
 rewrite Z_div_mult_full by omega.
 auto.
+}
 rewrite <- roundup_minus by omega.
 change 64 with 64.
 forget (roundup (Zlength msg + 9) 64) as N.
@@ -700,7 +702,7 @@ assert (0 <= Zlength ccc < 4)
 rewrite Z2Nat.inj_add by omega.
 rewrite <- list_repeat_app.
 replace (Zlength msg / 4 * 4) with (Zlength msg - Zlength ccc).
-Focus 2. {
+2:{
 rewrite Heqccc.
 rewrite (Zlength_correct (skipn _ _)).
 rewrite skipn_length by omega.
@@ -709,9 +711,9 @@ rewrite <- Zlength_correct.
 rewrite Nat2Z.inj_mul. change (Z.of_nat 4) with 4.
 rewrite Z2Nat.id  by omega.
  omega.
-} Unfocus.
-match goal with |- context [_ ++ list_repeat (Z.to_nat (4 * ?qq)) 0] =>
- assert (Zlist_to_intlist (list_repeat (Z.to_nat (4 * qq)) 0) =
+} 
+match goal with |- context [_ ++ list_repeat (Z.to_nat (4 * ?qq)) Byte.zero] =>
+ assert (bytelist_to_intlist (list_repeat (Z.to_nat (4 * qq)) Byte.zero) =
   zeros ((Zlength msg + 8) / 64 * 16 + 15 - (Zlength msg + 8) / 4));
   set (Q := qq) in *
 end. {
@@ -795,7 +797,7 @@ destruct (firstn 4 (skipn (Q - 4) msg))
  as [ | z0 [| z1 [| z2 [|z3 [|]]]]];inv H3.
 unfold app at 2. unfold app at 4.
 unfold generate_and_pad'; fold generate_and_pad'.
-unfold Zlist_to_intlist; fold Zlist_to_intlist.
+unfold bytelist_to_intlist; fold bytelist_to_intlist.
 replace (Z.of_nat (Q-4) + 4) with (Z.of_nat Q)
  by (rewrite Nat2Z.inj_sub by omega;
        change (Z.of_nat 4) with 4; omega).
@@ -812,7 +814,7 @@ apply Z.divide_factor_r.
 Qed.
 
 Lemma length_generate_and_pad:
-  forall (l: list Z),
+  forall (l: list byte),
      Zlength (generate_and_pad l) = roundup ((Zlength l +12)/4) 16.
 Proof.
 intros.
@@ -995,28 +997,28 @@ intros.
 assert (forall i, (i <= Z.to_nat 64)%nat ->
               forall n, 0 <= n < Z.of_nat i ->
  nthi (rev (generate_word (rev block) 48)) n = W (nthi block) n).
-Focus 2. {
+2:{
 apply (H0 (S (Z.to_nat n))).
 apply Nat2Z.inj_le. rewrite inj_S.
 repeat rewrite Z2Nat.id by omega. omega.
 rewrite inj_S.
 rewrite Z2Nat.id by omega. omega.
-} Unfocus.
-clear H n.
-induction i; intros.
+} 
+clear H n. induction i; intros.
 change (Z.of_nat 0) with 0 in H0; omega.
 spec IHi; [ omega | ].
 unfold nthi at 1.
 destruct (zlt n 16).
 rewrite generate_word_small; auto.
-Focus 2.
+2:{
 rewrite LB.
 apply Nat2Z.inj_lt. rewrite Z2Nat.id by omega. apply l.
+}
 rewrite W_equation.
 rewrite if_true by auto.
 reflexivity.
 rewrite nth_rev_generate_word; auto.
-Focus 2. {
+2: {
 split.
 apply Nat2Z.inj_le. change (Z.of_nat 16) with 16.
 rewrite Z2Nat.id by omega. omega.
@@ -1026,7 +1028,7 @@ change (Z.of_nat 64) with 64.
 apply Nat2Z.inj_le in H.
 rewrite Z2Nat.id in H by omega.
 omega.
-} Unfocus.
+} 
 rewrite W_equation.
 rewrite if_false by omega.
 rewrite inj_S in H0.
@@ -1104,7 +1106,7 @@ rewrite (rnd_64_S _ _ _
     (nthi K256 (Z.of_nat n))
     (nthi block (Z.of_nat n))).
 2: (unfold nthi; rewrite Nat2Z.id; apply nth_error_nth; simpl; omega).
-Focus 2.
+2:{
 unfold nthi; rewrite Nat2Z.id.
 rewrite (nth_error_nth _ Int.zero n).
 2: rewrite rev_length, length_generate_word, rev_length, H0;
@@ -1112,6 +1114,7 @@ rewrite (nth_error_nth _ Int.zero n).
 f_equal.
 rewrite generate_word_small by omega.
 auto.
+}
 unfold rnd_function.
 destruct (rnd_64 regs K256 (firstn n (rev (generate_word (rev block) c48))))
   as [ | a [ | b [ | c [ | d [ | e [ | f [ | g [ | h [ | ]]]]]]]]]; auto.
@@ -1127,11 +1130,12 @@ rewrite (rnd_64_S _ _ _
     (nthi K256 (Z.of_nat (n+16)))
     (nthi (rev (generate_word (rev block) c48)) (Z.of_nat (n+16)))).
 2: (unfold nthi; rewrite Nat2Z.id; apply nth_error_nth; simpl; omega).
-Focus 2.
+2:{
 unfold nthi; rewrite Nat2Z.id.
 apply (nth_error_nth _ Int.zero (n+16)).
 rewrite rev_length, length_generate_word, rev_length, H0;
   change c48 with 48%nat; omega.
+}
 rewrite Round_equation.
 rewrite <- IHn by omega.
 rewrite if_false by omega.

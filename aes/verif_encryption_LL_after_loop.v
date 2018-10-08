@@ -3,15 +3,6 @@ Require Import aes.bitfiddling.
 Require Import aes.encryption_LL_round_step_eqs.
 Open Scope Z.
 
-(* duplicated from verif_encryption_LL_loop_body to allow make -j *)
-Definition encryption_loop_body_Delta' DS :=
- (with_Delta_specs DS
-   (initialized_list
-     [_i; _RK; _X0; _X1; _X2; _X3; _tmp; _b0; _b1; _b2; _b3; _b0__1; _b1__1;
-     _b2__1; _b3__1; _b0__2; _b1__2; _b2__2; _b3__2; _b0__3; _b1__3; _b2__3;
-     _b3__3; _t'4; _t'3; _t'2; _t'1]
-     (func_tycontext f_mbedtls_aes_encrypt Vprog Gprog))).
-
 Definition encryption_after_loop : statement :=
    ltac:(find_statement_in_body
        f_mbedtls_aes_encrypt
@@ -39,8 +30,7 @@ end.
 
 Lemma encryption_after_loop_proof:
 forall (Espec : OracleKind) (ctx input output : val)
-  (ctx_sh in_sh out_sh : share) (plaintext (*exp_key*) : list Z) (tables : val)
-  (Delta_specs : PTree.t funspec)
+  (ctx_sh in_sh out_sh : share) (plaintext (*exp_key*) : list Z) (gv: globals)
  (H: Zlength plaintext = 16)
  (SH: readable_share ctx_sh)
  (SH0: readable_share in_sh)
@@ -51,22 +41,22 @@ forall (Espec : OracleKind) (ctx input output : val)
  (Eq: forall i : Z,
   0 <= i < 60 ->
   force_val
-    (sem_add_pi tuint
+    (sem_add_ptr_int tuint Signed
        (field_address t_struct_aesctx [ArraySubsc i; StructField _buf] ctx)
        (Vint (Int.repr 1))) =
   field_address t_struct_aesctx [ArraySubsc (i + 1); StructField _buf] ctx),
   let S0 := mbed_tls_initial_add_round_key plaintext buf in
    forall (S12 : four_ints)
    (HeqS12: S12 = mbed_tls_enc_rounds 12 S0 buf 4),
-semax (encryption_loop_body_Delta' Delta_specs)
+semax (func_tycontext f_mbedtls_aes_encrypt Vprog Gprog nil)
   (PROP ( )
    LOCAL (temp _RK
             (field_address t_struct_aesctx [ArraySubsc 52; StructField _buf]
                ctx); temp _X3 (Vint (col 3 S12));
    temp _X2 (Vint (col 2 S12)); temp _X1 (Vint (col 1 S12));
    temp _X0 (Vint (col 0 S12));
-   temp _output output; gvar _tables tables)
-   SEP (data_at_ out_sh (tarray tuchar 16) output; tables_initialized tables;
+   temp _output output; gvars gv)
+   SEP (data_at_ out_sh (tarray tuchar 16) output; tables_initialized (gv _tables);
    data_at in_sh (tarray tuchar 16) (map Vint (map Int.repr plaintext)) input;
    data_at ctx_sh t_struct_aesctx 
         (Vint (Int.repr Nr),
@@ -86,29 +76,42 @@ semax (encryption_loop_body_Delta' Delta_specs)
            input;
          data_at out_sh (tarray tuchar 16)
            (map Vint (mbed_tls_aes_enc plaintext buf)) output;
-         tables_initialized tables))) emp).
+         tables_initialized (gv _tables)))) emp).
 Proof.
 intros.
-  unfold encryption_after_loop, encryption_loop_body_Delta'.
+  unfold encryption_after_loop.
   abbreviate_semax.
   unfold tables_initialized.
   pose proof masked_byte_range.
+  assert (H2': forall i, 0 <= Int.unsigned (Int.and i (Int.repr 255)) < 256). {
+    clear.  intros. rewrite Int.and_commut.
+    pose proof (Int.and_le (Int.repr 255) i).
+    rewrite Int.unsigned_repr in H by computable. 
+    pose proof (Int.unsigned_range (Int.and (Int.repr 255) i)). omega.
+  }
+  unfold Int.and.
 
   remember (mbed_tls_fround S12 buf 52) as S13.
-  destruct (round13eq _ _ _ HeqS13) as [EqY0 [EqY1 [EqY2 EqY3]]].
 
   (* 2nd-to-last AES round: just a normal AES round, but not inside the loop *)
   do 2 forward. simpl (temp _RK _). rewrite Eq by computable. do 6 forward.
-  deadvars!. rewrite EqY0; clear EqY0. 
+  deadvars!. (* rewrite EqY0; clear EqY0.  *)
   do 2 forward. simpl (temp _RK _). rewrite Eq by computable. do 6 forward.
-  deadvars!. rewrite EqY1; clear EqY1.
+  deadvars!. (* rewrite EqY1; clear EqY1. *)
   do 2 forward. simpl (temp _RK _). rewrite Eq by computable. do 6 forward.
-  deadvars!. rewrite EqY2; clear EqY2.
+  deadvars!. (* rewrite EqY2; clear EqY2. *)
   do 2 forward. simpl (temp _RK _). rewrite Eq by computable. do 6 forward.
-  deadvars!. rewrite EqY3; clear EqY3.
+  deadvars!. (* rewrite EqY3; clear EqY3. *)
+
+  destruct (round13eq _ _ _ HeqS13) as [EqY0 [EqY1 [EqY2 EqY3]]].
+  unfold Int.and.
+   rewrite !(Int.unsigned_repr 255) in *|-* by computable .
+    rewrite !Int.unsigned_repr by
+     match goal with |- context [Z.land ?A] => clear - H0; specialize (H0 A); rep_omega end.
+  rewrite EqY0, EqY1, EqY2, EqY3; clear EqY0 EqY1 EqY2 EqY3.
 
   (* last AES round: special (uses S-box instead of forwarding tables) *)
-  assert (forall i, Int.unsigned (Znth i FSb Int.zero) <= Byte.max_unsigned). {
+  assert (forall i, Int.unsigned (Znth i FSb) <= Byte.max_unsigned). {
     intros. pose proof (FSb_range i) as P. change 256 with (Byte.max_unsigned + 1) in P. omega.
   }
   assert (Hfinal := final_aes_eq buf plaintext S0 S12 S13 (eq_refl _) HeqS12 HeqS13);
@@ -119,17 +122,23 @@ intros.
      TODO floyd or documentation: What should users do if "forward" takes forever? *)
 
   remember (mbed_tls_final_fround S13 buf 56) as S14.
-  destruct (round14eq _ _ _ HeqS14) as [EqX0 [EqX1 [EqX2 EqX3]]]. clear HeqS14.
 
   do 2 forward. simpl (temp _RK _). rewrite Eq by computable. do 6 forward.
-  deadvars!. rewrite EqX0; clear EqX0.
+  deadvars!. (*rewrite EqX0; clear EqX0. *)
   do 2 forward. simpl (temp _RK _). rewrite Eq by computable. do 6 forward.
-  deadvars!. rewrite EqX1; clear EqX1.
+  deadvars!. (*rewrite EqX1; clear EqX1. *)
   do 2 forward. simpl (temp _RK _). rewrite Eq by computable. do 6 forward.
-  deadvars!. rewrite EqX2; clear EqX2.
+  deadvars!. (*rewrite EqX2; clear EqX2. *)
   do 2 forward. simpl (temp _RK _). rewrite Eq by computable. do 6 forward.
-  deadvars!. rewrite EqX3; clear EqX3.
+  deadvars!. (*rewrite EqX3; clear EqX3. *)
  clear Eq.
+  destruct (round14eq _ _ _ HeqS14) as [EqX0 [EqX1 [EqX2 EqX3]]]. clear HeqS14.
+ unfold Int.and.
+   rewrite !(Int.unsigned_repr 255) in *|-* by computable .
+    rewrite !Int.unsigned_repr by
+     match goal with |- context [Z.land ?A] => clear - H0; specialize (H0 A); rep_omega end.
+  rewrite EqX0, EqX1, EqX2, EqX3; clear EqX0 EqX1 EqX2 EqX3.
+
  remember_temp_Vints (@nil localdef).
 
   do 16 (forward;

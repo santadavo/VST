@@ -1,5 +1,5 @@
-Require Import floyd.proofauto.
-Require Import progs.message.
+Require Import VST.floyd.proofauto.
+Require Import VST.progs.message.
 Instance CompSpecs : compspecs. make_compspecs prog. Defined.
 Definition Vprog : varspecs. mk_varspecs prog. Defined.
 
@@ -25,13 +25,13 @@ mf_build {
           memory_block sh (mf_size-len) (offset_val len buf)
 }.
 
-Implicit Arguments mf_build [[t]].
-Implicit Arguments mf_size [[t]].
-Implicit Arguments mf_data_assert [[t]].
-Implicit Arguments mf_assert [[t]].
-Implicit Arguments mf_bufprop [[t]].
-Implicit Arguments mf_size_range [[t]].
-Implicit Arguments mf_restbuf [[t]].
+Arguments mf_build {t}.
+Arguments mf_size {t}.
+Arguments mf_data_assert {t}.
+Arguments mf_assert {t}.
+Arguments mf_bufprop {t}.
+Arguments mf_size_range {t}.
+Arguments mf_restbuf {t}.
 
 Definition t_struct_intpair := Tstruct _intpair noattr.
 Definition t_struct_message := Tstruct _message noattr.
@@ -89,9 +89,9 @@ Definition intpair_deserialize_spec :=
 
 Definition main_spec :=
  DECLARE _main
-  WITH u : unit
-  PRE  [] main_pre prog nil u
-  POST [ tint ] main_post prog nil u.
+  WITH gv: globals
+  PRE  [] main_pre prog nil gv
+  POST [ tint ] main_post prog nil gv.
 
 Definition message (sh: share) {t: type} (format: message_format t) (m: val) : mpred :=
   EX fg: val*val,
@@ -114,14 +114,20 @@ change (mf_size intpair_message) with (sizeof (tarray tint 2)).
 assert_PROP (field_compatible (tarray tint 2) [] buf).
   entailer!.
   hnf in H; decompose[and] H; repeat split; auto.
+  (* TODO: abstract the following proof. *)  
+  unfold align_compatible in H0 |- *.
+  destruct buf; auto.
+  constructor.
+  intros.
+  eapply align_compatible_rec_by_value_inv in H0; [| reflexivity].
+  econstructor; [reflexivity |].
+  apply Z.divide_add_r; auto.
+  exists i0; rewrite Z.mul_comm; auto.
 rewrite memory_block_data_at_; auto.
 change (data_at_ sh' (tarray tint 2) buf) with
    (data_at sh' (tarray tint 2) [Vundef;Vundef] buf).
 forward. (* x = p->x; *)
 forward. (* y = p->y; *)
-(* TODO: perhaps the assert_PROP shouldn't even be necessary... *)
- assert_PROP (force_val (sem_cast_neutral buf) = field_address (tarray tint 2) nil buf).
-  entailer!; rewrite field_compatible_field_address by auto; simpl; normalize.
 forward. (*  ((int * )buf)[0]=x; *)
 forward. (*  ((int * )buf)[1]=y; *)
 forward. (* return 8; *)
@@ -138,9 +144,6 @@ start_function.
 simpl. Intros. subst len.
 destruct data as [[|x1 | | | | ] [|y1 | | | | ]]; try contradiction.
 clear H H1 H2.
-
-assert_PROP (force_val (sem_cast_neutral buf) = field_address (tarray tint 2) nil buf).
-   entailer!; rewrite field_compatible_field_address by auto; simpl; normalize.
 forward. (* x = ((int * )buf)[0]; *)
 forward. (* y = ((int * )buf)[1]; *)
 forward. (* p->x = x; *)
@@ -151,22 +154,23 @@ Qed.
 Lemma body_main: semax_body Vprog Gprog f_main main_spec.
 Proof.
 name buf _buf.
-name q _q.
-name p _p.
-name ipm _intpair_message.
-start_function.  fold cc_default noattr.
-(* TODO:   "name" tactic doesn't work for function-pointer gvars? *)
-rename gvar1 into des.
-rename gvar0 into ser.
+
+start_function.
+set (ipm := gv _intpair_message).
+fold cc_default noattr.
 make_func_ptr _intpair_deserialize.
 make_func_ptr _intpair_serialize.
+set (des := gv _intpair_deserialize).
+set (ser := gv _intpair_serialize).
 gather_SEP 5 6 7.
 replace_SEP 0 
     (data_at Ews t_struct_message
       (Vint (Int.repr (mf_size intpair_message)), (ser, des)) ipm). {
  entailer!.
- unfold_data_at 1%nat.
- rewrite <- (mapsto_field_at _ _ [StructField _bufsize] (Vint (Int.repr 8))) by auto with field_compatible.
+ unfold_data_at 2%nat.
+ rewrite (field_at_data_at _ _ _ _ ipm).
+rewrite data_at_tuint_tint.
+(* rewrite <- (mapsto_field_at _ _ [StructField _bufsize] (Vint (Int.repr 8))) by auto with field_compatible. *)
  rewrite <- (mapsto_field_at _ _ [StructField _deserialize] des) by auto with field_compatible.
  rewrite <- (mapsto_field_at _ _ [StructField _serialize] ser) by auto with field_compatible.
  rewrite !field_compatible_field_address by auto with field_compatible.
@@ -185,9 +189,9 @@ with (memory_block Tsh (mf_size intpair_message) buf).
 assert_PROP (align_compatible tint buf).
   entailer!.
   destruct HPbuf; subst; simpl.
-  apply Z.divide_0_r.
+  econstructor; [reflexivity | apply Z.divide_0_r].
 forward_call (* len = ser(&p, buf); *)
-      ((Vint (Int.repr 1), Vint (Int.repr 2)), p, buf, Tsh, Tsh).
+      ((Vint (Int.repr 1), Vint (Int.repr 2)), v_p, buf, Tsh, Tsh).
   repeat split; auto.
 Intros rest.
 simpl.
@@ -195,14 +199,13 @@ Intros. subst rest.
 
 forward. (* des = intpair_message.deserialize; *)
 forward_call (* des(&q, buf, 8); *)
-        ((Vint (Int.repr 1), Vint (Int.repr 2)), q, buf, Tsh, Tsh, 8).
+        ((Vint (Int.repr 1), Vint (Int.repr 2)), v_q, buf, Tsh, Tsh, 8).
   simpl. fold t_struct_intpair. entailer!.
   split3; auto. simpl; computable.
 (* after the call *)
 forward. (* x = q.x; *)
 forward. (* y = q.y; *)
 forward. (* return x+y; *)
-Exists buf q p.
 sep_apply (data_at_memory_block Tsh (tarray tint 2) [Vint (Int.repr 1); Vint (Int.repr 2)] buf).
 simpl sizeof.
 sep_apply (memory_block_data_at__tarray_tuchar Tsh buf 8).

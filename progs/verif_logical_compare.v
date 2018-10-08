@@ -1,5 +1,5 @@
-Require Import floyd.proofauto.
-Require Import progs.logical_compare.
+Require Import VST.floyd.proofauto.
+Require Import VST.progs.logical_compare.
 Instance CompSpecs : compspecs.
 Proof. make_compspecs prog. Defined.
 
@@ -66,12 +66,12 @@ match s with
 end.
 
 Lemma semax_shortcut_logical:
-  forall Espec {cs: compspecs} Delta P Q R tid s v Qtemp Qvar el,
+  forall Espec {cs: compspecs} Delta P Q R tid s v Qtemp Qvar GV el,
    quick_shortcut_logical s = Some tid ->
    typeof_temp Delta tid = Some tint ->
-   local2ptree Q = (Qtemp, Qvar, nil, nil) ->
+   local2ptree Q = (Qtemp, Qvar, nil, GV) ->
    Qtemp ! tid = None ->
-   shortcut_logical (msubst_eval_expr Qtemp Qvar) tid s = Some (v, el) ->
+   shortcut_logical (msubst_eval_expr Delta Qtemp Qvar GV) tid s = Some (v, el) ->
    ENTAIL Delta, PROPx P (LOCALx Q (SEPx R)) |-- fold_right (fun e q => tc_expr Delta e && q) TT el ->
    @semax cs Espec Delta (PROPx P (LOCALx Q (SEPx R)))
           s (normal_ret_assert (PROPx P (LOCALx (temp tid (Vint v) :: Q) (SEPx R)))).
@@ -101,9 +101,9 @@ Definition do_and_spec :=
 
 Definition main_spec :=
  DECLARE _main
-  WITH u : unit
-  PRE  [] main_pre prog nil u
-  POST [ tint ] main_post prog nil u.
+  WITH gv: globals
+  PRE  [] main_pre prog nil gv
+  POST [ tint ] main_post prog nil gv.
 
 Definition Vprog : varspecs := nil.
 
@@ -141,10 +141,10 @@ Qed.
 
 Existing Instance NullExtension.Espec.
 
-Lemma all_funcs_correct:
-  semax_func Vprog Gprog (prog_funct prog) Gprog.
+Lemma prog_correct:
+  semax_prog prog Vprog Gprog.
 Proof.
-unfold Gprog, prog, prog_funct; simpl.
+prove_semax_prog.
 semax_func_cons body_do_or.
 semax_func_cons body_do_and.
 semax_func_cons body_main.

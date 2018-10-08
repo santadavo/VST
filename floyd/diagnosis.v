@@ -1,6 +1,6 @@
-Require Import floyd.base2.
-Require Import floyd.client_lemmas.
-Require Import floyd.reptype_lemmas.
+Require Import VST.floyd.base2.
+Require Import VST.floyd.client_lemmas.
+Require Import VST.floyd.reptype_lemmas.
 
 Local Open Scope logic.
 
@@ -51,8 +51,6 @@ Ltac ccf_LOCAL id0 fsig Q :=
                                  first [test_stuck |
                                  ccf_LOCAL id0 fsig Q']
  | lvar _ _ _ :: ?Q' =>  ccf_LOCAL id0 fsig Q'
- | gvar _ _ :: ?Q' => ccf_LOCAL id0 fsig Q'
- | sgvar _ _ :: ?Q' => ccf_LOCAL id0 fsig Q'
  | ?Q1 :: _ => stuckwith (Error__Funspec id0 not_in_canonical_form
                       (because_of_LOCAL Q1))
  end.

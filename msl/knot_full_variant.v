@@ -1,8 +1,8 @@
-Require Import msl.base.
-Require Import msl.ageable.
-Require Import msl.functors.
-Import msl.functors.MixVariantFunctor.
-Import msl.functors.MixVariantFunctorLemmas.
+Require Import VST.msl.base.
+Require Import VST.msl.ageable.
+Require Import VST.msl.functors.
+Import VST.msl.functors.MixVariantFunctor.
+Import VST.msl.functors.MixVariantFunctorLemmas.
 
 Module Type KNOT_INPUT__MIXVARIANT_HERED_T_OTH_REL.
   Parameter F : functor.
@@ -769,11 +769,12 @@ Module Knot_MixVariantHeredTOthRel (KI':KNOT_INPUT__MIXVARIANT_HERED_T_OTH_REL) 
       [ |- _ = exist _ ?X _ ] =>
       assert (x0 = X)
     end.
-    Focus 2.
+   2:{
     generalize (approx_obligation_1 (S x)
       (exist (fun p => hered p) x0 h)).
     rewrite <- H0.
     intros. f_equal. apply proof_irr.
+    }
     extensionality.
     destruct x1.
     unfold unstrat in H.

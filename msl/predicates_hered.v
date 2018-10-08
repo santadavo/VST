@@ -3,8 +3,8 @@
  *
  *)
 
-Require Import msl.base.
-Require Import msl.ageable.
+Require Import VST.msl.base.
+Require Import VST.msl.ageable.
 
 Delimit Scope pred with pred.
 Local Open Scope pred.
@@ -23,7 +23,7 @@ Definition pred (A:Type) {AG:ageable A} :=
 Bind Scope pred with pred.
 
 (* Here is some junk that makes the definition of "pred" opaque
-   to most tactics but sill allows the "Program" extension to
+   to most tactics but still allows the "Program" extension to
    see it is a subset type.  The coercion is sugar that allows us to use
    predicates easily.
  *)
@@ -758,6 +758,31 @@ Proof.
   rewrite H1 in H2; discriminate.
 Qed.
 
+Lemma later_ex'' {A} `{ageable A} : forall B (F:B->pred A),
+  |>(exp F) |-- (EX x:B, |>(F x)) || |> FF.
+Proof.
+  intros.
+  unfold derives; intros.
+  simpl in H |- *.
+  destruct (age1 a) eqn:?H; [left | right].
+  + simpl in H0.
+    pose proof H0 a0.
+    destruct H2 as [b ?].
+    {
+      constructor.
+      auto.
+    }
+    exists b.
+    intros.
+    revert H2; apply pred_nec_hereditary.
+    eapply age_later_nec; eauto.
+  + intros.
+    clear - H2 H1.
+    induction H2.
+    - hnf in H0; congruence.
+    - auto.
+Qed.
+
 Lemma later_imp {A} `{ageable A} : forall P Q,
   |>(P --> Q) = |>P --> |>Q.
 Proof.
@@ -887,7 +912,7 @@ intros.
 apply boxy_i; auto; intros.
 destruct H2 as [x ?].
 rewrite <- H0 in H2.
-spec H2 w' H1.
+specialize ( H2 w' H1).
 econstructor; eauto.
 Qed.
 
@@ -979,7 +1004,7 @@ apply boxy_i; auto.
 intros.
 simpl in *.
 intro.
-spec H2 b.
+specialize ( H2 b).
 rewrite <- H0 in H2.
 apply H2; auto.
 Qed.
@@ -990,6 +1015,24 @@ Lemma later_allp {A} `{agA : ageable A}:
 Proof.
 intros.
 apply pred_ext; unfold derives; simpl; intros; eapply H; eauto.
+Qed.
+
+Lemma later_prop {A} `{agA : ageable A}:
+       forall P: Prop, |> (prop P) |-- prop P || |> FF.
+Proof.
+  intros.
+  unfold derives; intros.
+  simpl in H |- *.
+  destruct (age1 a) eqn:?H; [left | right].
+  + apply (H a0).
+    unfold laterR.
+    constructor.
+    auto.
+  + intros.
+    clear - H0 H1.
+    induction H1.
+    - hnf in H; congruence.
+    - auto.
 Qed.
 
 Lemma box_derives {A} `{ageable A} : forall M (P Q:pred A),

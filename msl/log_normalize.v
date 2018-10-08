@@ -1,12 +1,13 @@
-Require Import msl.simple_CCC.
-Require Import msl.seplog.
-(* Require Import msl.alg_seplog. *)
-Require Import msl.Extensionality.
+Require Import VST.msl.simple_CCC.
+Require Import VST.msl.seplog.
+(* Require Import VST.msl.alg_seplog. *)
+Require Import VST.msl.Extensionality.
 Require Import Coq.Setoids.Setoid.
 
 Local Open Scope logic.
 
-Hint Resolve @derives_refl.
+Hint Extern 0 (_ |-- _) => match goal with |- ?A |-- ?B => constr_eq A B; simple apply derives_refl end.
+(* Hint Resolve @derives_refl.    too expensive sometimes when it fails . . . *)
 
 Ltac solve_andp' :=
   first [ apply derives_refl
@@ -65,6 +66,15 @@ intros.
 apply andp_right.
 apply andp_left1; apply H.
 apply andp_left2; apply H0.
+Qed.
+
+Lemma orp_derives {A} {NA: NatDed A}:
+  forall P Q P' Q': A, P |-- P' -> Q |-- Q' -> P || Q |-- P' || Q'.
+Proof.
+intros.
+apply orp_left.
+apply orp_right1; apply H.
+apply orp_right2; apply H0.
 Qed.
 
 Class CCCviaNatDed (A: Type) (prod expo: A -> A -> A) {ND: NatDed A}: Prop :=
@@ -283,14 +293,6 @@ Proof.
 Qed.
 Hint Rewrite @FF_andp @andp_FF : norm.
 
-Lemma orp_comm: forall {A: Type} `{NatDed A} (P Q: A), P || Q = Q || P.
-Proof.
-  intros.
-  apply pred_ext.
-  + apply orp_left; [apply orp_right2 | apply orp_right1]; auto.
-  + apply orp_left; [apply orp_right2 | apply orp_right1]; auto.
-Qed.
-
 Lemma FF_orp: forall {A: Type} `{NatDed A} (P: A), FF || P = P.
 Proof.
   intros.
@@ -418,6 +420,20 @@ Proof.
     apply derives_refl.
 Qed.
 
+Lemma exp_derives {A}{NA: NatDed A}{B}:
+   forall F G: B -> A, (forall x, F x |-- G x) -> exp F |-- exp G.
+Proof.
+intros.
+apply exp_left; intro x. apply exp_right with x; auto.
+Qed.
+
+Lemma exp_congr:
+ forall A NA T X Y,
+    (forall v, X v = Y v) -> @exp A NA T X = @exp A NA T Y.
+Proof.
+intros. f_equal. extensionality v; auto.
+Qed.
+
 Lemma exp_uncurry:
   forall {T} {ND: NatDed T} A B F, (@exp T ND A (fun a => @exp T ND B (fun b => F a b)))
    = @exp T ND (A*B) (fun ab => F (fst ab) (snd ab)).
@@ -448,6 +464,29 @@ Proof.
     apply (allp_left _ v); apply derives_refl.
 Qed.
 
+Lemma distrib_andp_orp: forall {A : Type} {ND : NatDed A} (P Q R : A),
+  (P && Q) || R = (P || R) && (Q || R).
+Proof.
+  intros.
+  apply pred_ext.
+  + apply orp_left.
+    - apply andp_right; apply orp_right1; solve_andp.
+    - apply andp_right; apply orp_right2, derives_refl.
+  + rewrite imp_andp_adjoint.
+    apply orp_left.
+    - rewrite <- imp_andp_adjoint.
+      rewrite andp_comm.
+      rewrite imp_andp_adjoint.
+      apply orp_left.
+      * rewrite <- imp_andp_adjoint.
+        rewrite andp_comm.
+        apply orp_right1, derives_refl.
+      * rewrite <- imp_andp_adjoint.
+        apply orp_right2; solve_andp.
+    - rewrite <- imp_andp_adjoint.
+      apply orp_right2; solve_andp.
+Qed.
+    
 Lemma prop_derives {A}{ND: NatDed A}:
  forall (P Q: Prop), (P -> Q) -> prop P |-- prop Q.
 Proof.
@@ -734,13 +773,6 @@ Hint Rewrite @sepcon_emp @emp_sepcon @TT_andp @andp_TT
          @sepcon_andp_prop @sepcon_andp_prop'
      using (solve [auto with typeclass_instances])
         : norm.
-
-Lemma exp_congr:
- forall A NA T X Y,
-    (forall v, X v = Y v) -> @exp A NA T X = @exp A NA T Y.
-Proof.
-intros. f_equal. extensionality v; auto.
-Qed.
 
 Lemma forall_pred_ext  {A}  {NA: NatDed A}: forall B (P Q: B -> A),
  (ALL x : B, (P x <--> Q x)) |-- (ALL x : B, P x) <--> (ALL x: B, Q x) .
@@ -1241,7 +1273,7 @@ prove_assoc_commut.
 Qed.
 
 (***** subtyping and contractiveness -- should split this into a separate file ******)
-Require Import msl.alg_seplog.
+Require Import VST.msl.alg_seplog.
 
 Lemma later_fash1 {A} {NA: NatDed A}{IA: Indir A}{RA: RecIndir A}:
    forall P : A, |> # P |-- # |> P.
@@ -1576,3 +1608,14 @@ Qed.
 
 (****** End contractiveness *****)
 
+Require Import VST.msl.ghost_seplog.
+
+Lemma bupd_andp2_corable: forall {A N D: Type} {ND : NatDed A} {SL : SepLog A} {CSL: ClassicalSep A} {BS : BupdSepLog A N D} {CoSL: CorableSepLog A},
+  forall P Q, corable Q -> (|==> P) && Q |-- |==> (P && Q).
+Proof.
+  intros.
+  rewrite (andp_comm P Q), (andp_left_corable Q), sepcon_comm by auto.
+  eapply derives_trans; [| apply bupd_frame_r].
+  rewrite (andp_comm _ Q), (andp_left_corable Q), sepcon_comm by auto.
+  auto.
+Qed.

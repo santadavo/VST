@@ -1,17 +1,15 @@
 Require Import compcert.common.Memory.
-Require Import msl.Coqlib2.
-Require Import msl.eq_dec.
-Require Import msl.seplog.
-Require Import msl.ageable.
-Require Import msl.age_to.
-Require Import veric.coqlib4.
-Require Import veric.juicy_mem.
-Require Import veric.compcert_rmaps.
-Require Import veric.semax.
-Require Import veric.juicy_extspec.
-Require Import veric.tycontext.
-Require Import veric.mem_lessdef.
-Require Import veric.age_to_resource_at.
+Require Import VST.msl.Coqlib2.
+Require Import VST.msl.eq_dec.
+Require Import VST.msl.ageable.
+Require Import VST.msl.age_to.
+Require Import VST.veric.coqlib4.
+Require Import VST.veric.juicy_mem.
+Require Import VST.veric.compcert_rmaps. 
+Require Import VST.veric.seplog.
+Require Import VST.veric.juicy_extspec.
+Require Import VST.veric.mem_lessdef.
+Require Import VST.veric.age_to_resource_at.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -44,13 +42,13 @@ Ltac agehyps :=
 (** * Aging and predicates *)
 
 Lemma hereditary_func_at' loc fs :
-  hereditary age (seplog.func_at' fs loc).
+  hereditary age (func_at' fs loc).
 Proof.
   apply pred_hered.
 Qed.
 
 Lemma anti_hereditary_func_at' loc fs :
-  hereditary (fun x y => age y x) (seplog.func_at' fs loc).
+  hereditary (fun x y => age y x) (func_at' fs loc).
 Proof.
   intros x y a; destruct fs as [f cc A P Q]; simpl.
   intros [pp E].
@@ -83,18 +81,18 @@ Qed.
 
 (** * Aging and operational steps *)
 
-Lemma jstep_age_sim {G C} {csem : @semantics.CoreSemantics G C mem} {ge c c' jm1 jm2 jm1'} :
+Lemma jstep_age_sim {C} {csem : @semantics.CoreSemantics C mem} {c c' jm1 jm2 jm1'} :
   age jm1 jm2 ->
-  jstep csem ge c jm1 c' jm1' ->
+  jstep csem c jm1 c' jm1' ->
   level jm2 <> O ->
   exists jm2',
     age jm1' jm2' /\
-    jstep csem ge c jm2 c' jm2'.
+    jstep csem c jm2 c' jm2'.
 Proof.
-  intros A [step [rd lev]] nz.
+  intros A [step [rd [lev Hg]]] nz.
   destruct (age1 jm1') as [jm2'|] eqn:E.
   - exists jm2'. split; auto.
-    split; [|split]; auto.
+    split; [|split; [|split]]; auto.
     + exact_eq step.
       f_equal; apply age_jm_dry; auto.
     + eapply (age_resource_decay _ (m_phi jm1) (m_phi jm1')).
@@ -106,59 +104,72 @@ Proof.
     + apply age_level in E.
       apply age_level in A.
       omega.
+    + rewrite (age1_ghost_of _ _ (age_jm_phi A)), (age1_ghost_of _ _ (age_jm_phi E)), Hg.
+      apply age_level in A; rewrite A in lev; inv lev.
+      rewrite !level_juice_level_phi; congruence.
   - apply age1_level0 in E.
     apply age_level in A.
     omega.
 Qed.
 
-Lemma jsafeN_age Z Jspec ge ora q n jm jmaged :
+Lemma jsafeN__age {G C Z HH Sem Jspec ge ora q n} jm jmaged :
   ext_spec_stable age (JE_spec _ Jspec) ->
   age jm jmaged ->
   le n (level jmaged) ->
-  @jsafeN Z Jspec ge n ora q jm ->
-  @jsafeN Z Jspec ge n ora q jmaged.
+  @jsafeN_ G Z C HH Sem Jspec ge n ora q jm ->
+  @jsafeN_ G Z C HH Sem Jspec ge n ora q jmaged.
 Proof.
-  intros heredspec A L Safe; revert jmaged A L.
-  induction Safe as
-      [ z c jm
-      | n z c jm c' jm' step safe IH
-      | n z c jm ef args x atex Pre Post
-      | n z c jm v Halt Exit ]; intros jmaged A L.
+  revert q jm jmaged; induction n.
   - constructor 1.
-  - simpl in step.
-    destruct (jstep_age_sim A step ltac:(omega)) as [jmaged' [A' step']].
-    econstructor 2; eauto.
-    apply IH; eauto.
-    apply age_level in A'.
-    apply age_level in A.
-    destruct step as [_ [_ ?]].
-    omega.
-  - econstructor 3.
-    + eauto.
-    + eapply (proj1 heredspec); eauto.
-    + intros ret jm' z' n' Hargsty Hretty H rel post.
-      destruct (Post ret jm' z' n' Hargsty Hretty H) as (c' & atex' & safe'); eauto.
-      unfold juicy_safety.Hrel in *.
-      split;[|split]; try apply rel.
-      * apply age_level in A; omega.
-      * apply age_jm_phi in A.
-        unshelve eapply (pures_eq_unage _ A), rel.
-        do 2 rewrite <-level_juice_level_phi.
-        omega.
-  - econstructor 4. eauto.
-    eapply (proj2 heredspec); eauto.
+  - intros ??? heredspec A L Safe.
+    inv Safe.
+    + destruct (jstep_age_sim A H0 ltac:(omega)) as [jmaged' [A' step']].
+      econstructor 2; eauto.
+      intros gh Hg J.
+      rewrite (age1_ghost_of _ _ (age_jm_phi A')) in J.
+      destruct (own.ghost_joins_approx _ _ _ J) as (J' & Hd').
+      rewrite <- level_juice_level_phi in *.
+      rewrite <- (age_level _ _ A') in *.
+      rewrite level_juice_level_phi, ghost_of_approx in J'.
+      destruct (H1 (own.make_join (ghost_of (m_phi m')) gh)) as (b & ? & Hupd & Hsafe); auto.
+      { eapply make_join_ext; eauto. }
+      destruct (jm_update_age _ _ _ Hupd A') as (b' & Hupd' & Hage').
+      eapply IHn in Hsafe; eauto.
+      eexists; split; [|eauto].
+      rewrite (age1_ghost_of _ _ (age_jm_phi Hage')).
+      rewrite <- level_juice_level_phi.
+      destruct Hupd' as (_ & -> & _); auto.
+      { destruct Hupd' as (_ & -> & _).
+        apply age_level in A'.
+        destruct H0 as (? & ? & ? & ?).
+        apply age_level in A.
+        omega. }
+    + econstructor 3.
+      * unfold j_at_external in *; rewrite <- (age_jm_dry A); eassumption. 
+      * eapply (proj1 heredspec); eauto.
+      * intros ret jm' z' n' Hargsty Hretty H rel post.
+        destruct (H2 ret jm' z' n' Hargsty Hretty H) as (c' & atex' & safe'); eauto.
+        unfold Hrel in *.
+        split;[|split]; try apply rel.
+        -- apply age_level in A; omega.
+        -- apply age_jm_phi in A.
+           unshelve eapply (pures_eq_unage _ A), rel.
+           do 2 rewrite <-level_juice_level_phi.
+           omega.
+    + econstructor 4. eauto.
+      eapply (proj2 heredspec); eauto.
 Qed.
 
-Lemma jsafeN_age_to Z Jspec ge ora q n l jm :
+Lemma jsafeN__age_to {G C Z HH Sem Jspec ge ora q n} l jm :
   ext_spec_stable age (JE_spec _ Jspec) ->
   le n l ->
-  @jsafeN Z Jspec ge n ora q jm ->
-  @jsafeN Z Jspec ge n ora q (age_to l jm).
+  @jsafeN_ G Z C HH Sem Jspec ge n ora q jm ->
+  @jsafeN_ G Z C HH Sem Jspec ge n ora q (age_to l jm).
 Proof.
   intros Stable nl.
   apply age_to_ind_refined.
   intros x y H L.
-  apply jsafeN_age; auto.
+  apply jsafeN__age; auto.
   omega.
 Qed.
 

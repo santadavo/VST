@@ -3,8 +3,8 @@
  *
  *)
 
-Require Import msl.base.
-Require Import msl.sepalg.
+Require Import VST.msl.base.
+Require Import VST.msl.sepalg.
 
 Definition constructive_join_sub {A} {JOIN: Join A} (w1 w3: A) := {w2 | join w1 w2 w3}.
 
@@ -123,7 +123,7 @@ Definition same_constructive_silhouette {A} {JOIN: Join A} (a b: A) :=
     intro phiu.
     split; intros [phix ?H].
     destruct (join_assoc H0 (join_comm H2)) as [phif [? ?]].
-    spec H phif.
+    specialize (H phif).
     destruct H as [?H ?H].
     assert (H6: constructive_joins phi phif) by (econstructor; eauto).
     spec H. rewrite constructive_joins_sym.  auto.
@@ -135,7 +135,7 @@ Definition same_constructive_silhouette {A} {JOIN: Join A} (a b: A) :=
     exists phix'.
     auto.
     destruct (join_assoc H1 (join_comm H2)) as [phif [? ?]].
-    spec H phif.
+    specialize (H phif).
     destruct H as [?H ?H].
     assert (H6: constructive_joins phi' phif) by (econstructor; eauto).
     spec H5. rewrite constructive_joins_sym.  auto.

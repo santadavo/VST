@@ -1,4 +1,4 @@
-Require Import floyd.proofauto.
+Require Import VST.floyd.proofauto.
 Require Import wand_demo.wand_frame.
 Require Import wand_demo.wand_frame_tactic.
 Require Import wand_demo.bst.
@@ -369,7 +369,7 @@ Proof.
     + (* then clause *)
       subst q.
       forward_call (sizeof t_struct_tree).
-        1: simpl; repable_signed.
+        1: simpl; rep_omega.
       Intros q.
       rewrite memory_block_data_at_ by auto.
       forward. (* q->key=x; *)
@@ -565,11 +565,11 @@ Proof.
       forward. (* q=p->left *)
       forward. (* *t=q *)
       forward_call (p0, sizeof t_struct_tree). (* freeN(p, sizeof ( *p )); *)
-      Focus 1. {
+      {
         entailer!.
         rewrite memory_block_data_at_ by auto.
         cancel.
-      } Unfocus.
+      }
       forward. (* return *)
       apply modus_ponens_wand'.
       Exists pa.

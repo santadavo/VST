@@ -1,6 +1,7 @@
-Require Import Coqlib.
+Require Import compcert.lib.Coqlib.
 Require Import List. Import ListNotations.
 Require Import Coq.Logic.FunctionalExtensionality.
+Require Import VST.floyd.functional_base.
 
 Require Import sha.ByteBitRelations. (* TODO this is only here because of bitsToBytes *)
 
@@ -21,7 +22,7 @@ Inductive result X: Type: Type :=
 Arguments success {X} _ _.
 Arguments error {X} _ _.
 
-Parameter get_bytes: nat -> stream -> result (list Z).
+Parameter get_bytes: nat -> stream -> result (list byte).
 Parameter get_bits: nat -> stream -> result (list bool).
 
 End ABSTRACT_ENTROPY.
@@ -50,7 +51,7 @@ Fixpoint get_bits (k: nat) (s: stream): result (list bool) :=
                 | error e s' => error  e s'
                 | success b s' =>
                   match s' O with
-                    | None => error catastrophic_error (fun i => match nat_compare i k' with
+                    | None => error catastrophic_error (fun i => match Nat.compare i k' with
                                                                    | Lt => s i
                                                                    | Eq | Gt => s (1 + i)%nat
                                                                  end
@@ -134,7 +135,7 @@ Fixpoint get_bits_concrete (k: nat) (s: stream) (max: nat): @result (list bool) 
         | None => error catastrophic_error (fun i => s (1 + i)%nat)
         | Some bit =>
           match get_bits_concrete k' s max with
-            | error e s' => error e (fun i => match nat_compare i (max - k)%nat with
+            | error e s' => error e (fun i => match Nat.compare i (max - k)%nat with
                                                   | Gt => s' i
                                                   | Eq | Lt => s i
                                      end)
@@ -192,7 +193,7 @@ Proof.
     {
       simpl. rewrite <- HeqsO.
       replace (fun i : nat =>
-      match nat_compare i 0 with
+      match Nat.compare i 0 with
       | Eq => s (S i)
       | Lt => s i
       | Gt => s (S i)
@@ -207,7 +208,7 @@ Proof.
   simpl.
   *)
 
-Definition get_bytes (k: nat) (s: stream): result (list Z) :=
+Definition get_bytes (k: nat) (s: stream): result (list byte) :=
   match get_bits (8 * k)%nat s with
     | success bits s' => success (bitsToBytes bits) s'
     | error e s' => error e s'

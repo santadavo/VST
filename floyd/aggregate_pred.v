@@ -1,17 +1,16 @@
-Require Import floyd.base2.
-Require Import floyd.client_lemmas.
-Require Import floyd.type_induction.
-(*Require Import floyd.fieldlist.*)
-Require Import floyd.compact_prod_sum.
-(*Require Import floyd.aggregate_type.*)
-Require Import floyd.mapsto_memory_block.
-Require Import floyd.nested_pred_lemmas.
-Require Import floyd.jmeq_lemmas.
-Require Import floyd.sublist.
+Require Import VST.floyd.base2.
+Require Import VST.floyd.client_lemmas.
+Require Import VST.floyd.type_induction.
+(*Require Import VST.floyd.fieldlist.*)
+Require Import VST.floyd.compact_prod_sum.
+(*Require Import VST.floyd.aggregate_type.*)
+Require Import VST.floyd.mapsto_memory_block.
+Require Import VST.floyd.nested_pred_lemmas.
+Require Import VST.floyd.jmeq_lemmas.
+Require Import VST.floyd.sublist.
 
-Require Export floyd.fieldlist.
-Require Export floyd.aggregate_type.
-
+Require Export VST.floyd.fieldlist.
+Require Export VST.floyd.aggregate_type.
 
 Open Scope Z.
 Open Scope logic.
@@ -25,13 +24,13 @@ Definition and lemmas about rangespec
 Fixpoint rangespec (lo: Z) (n: nat) (P: Z -> val -> mpred): val -> mpred :=
   match n with
   | O => fun _ => emp
-  | S n' => P lo * rangespec (Zsucc lo) n' P
+  | S n' => P lo * rangespec (Z.succ lo) n' P
  end.
 
 Fixpoint fold_range' {A: Type} (f: Z -> A -> A) (zero: A) (lo: Z) (n: nat) : A :=
  match n with
   | O => zero
-  | S n' => f lo (fold_range' f  zero (Zsucc lo) n')
+  | S n' => f lo (fold_range' f  zero (Z.succ lo) n')
  end.
 
 Definition fold_range {A: Type} (f: Z -> A -> A) (zero: A) (lo hi: Z) : A :=
@@ -78,8 +77,10 @@ Lemma rangespec_shift: forall lo lo' len P P' p p',
 Proof.
   intros; apply pred_ext; apply rangespec_shift_derives;
   intros.
+  + erewrite H; eauto. 
+      apply derives_refl.
   + erewrite H; eauto.
-  + erewrite H; eauto.
+      apply derives_refl.
     omega.
 Qed.
 
@@ -132,9 +133,9 @@ Definition of aggregate predicates.
 
 ******************************************)
 
-Definition array_pred {A: Type} (default: A) (lo hi: Z) (P: Z -> A -> val -> mpred) (v: list A) (p: val) : mpred :=
+Definition array_pred {A: Type}{d: Inhabitant A}  (lo hi: Z) (P: Z -> A -> val -> mpred) (v: list A) (p: val) : mpred :=
   !! (Zlength v = hi - lo) &&
-  rangespec lo (Z.to_nat (hi-lo)) (fun i => P i (Znth (i-lo) v default)) p.
+  rangespec lo (Z.to_nat (hi-lo)) (fun i => P i (Znth (i-lo) v)) p.
 
 Definition struct_pred (m: members) {A: ident * type -> Type} (P: forall it, A it -> val -> mpred) (v: compact_prod (map A m)) (p: val): mpred.
 Proof.
@@ -193,9 +194,9 @@ Properties
 
 ******************************************)
 
-Lemma array_pred_len_0: forall {A} (d: A) lo hi P p,
+Lemma array_pred_len_0: forall {A}{d: Inhabitant A} lo hi P p,
   hi = lo ->
-  array_pred d lo hi P nil p = emp.
+  array_pred lo hi P nil p = emp.
 Proof.
   intros.
   unfold array_pred.
@@ -205,8 +206,8 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma array_pred_len_1: forall {A} (d: A) i P v p,
-  array_pred d i (i + 1) P (v :: nil) p = P i v p.
+Lemma array_pred_len_1: forall {A}{d: Inhabitant A} i P v p,
+  array_pred i (i + 1) P (v :: nil) p = P i v p.
 Proof.
   intros.
   unfold array_pred.
@@ -216,12 +217,12 @@ Proof.
   unfold Znth. rewrite Z.sub_diag. rewrite if_false by omega. change (Z.to_nat 0) with 0%nat. auto.
 Qed.
 
-Lemma split_array_pred: forall {A}  (d: A) lo mid hi P v p,
+Lemma split_array_pred: forall {A}{d: Inhabitant A} lo mid hi P v p,
   lo <= mid <= hi ->
   Zlength v = hi - lo ->
-  array_pred d lo hi P v p =
-  array_pred d lo mid P (sublist 0 (mid-lo) v) p *
-  array_pred d mid hi P (sublist (mid-lo) (hi-lo) v) p.
+  array_pred lo hi P v p =
+  array_pred lo mid P (sublist 0 (mid-lo) v) p *
+  array_pred mid hi P (sublist (mid-lo) (hi-lo) v) p.
 Proof.
   intros.
   unfold array_pred.
@@ -255,14 +256,14 @@ Proof.
       rewrite Znth_sublist by (try rewrite Nat2Z.inj_succ; omega).
       reflexivity.
     - replace (rangespec (Z.succ lo) (n + Z.to_nat (hi - mid))
-              (fun i : Z => P i (Znth (i - lo) v d)) p)
+              (fun i : Z => P i (Znth (i - lo) v)) p)
       with (rangespec (Z.succ lo) (n + Z.to_nat (hi - mid))
-              (fun i : Z => P i (Znth (i - Z.succ lo) (skipn 1 v) d)) p).
-      Focus 2. {
+              (fun i : Z => P i (Znth (i - Z.succ lo) (skipn 1 v))) p).
+      2:{
         apply rangespec_ext; intros.
         f_equal.
         rewrite <- Znth_succ by omega; auto.
-      } Unfocus.
+      }
       rewrite Nat2Z.inj_succ in H0.
       rewrite IHn by omega.
       f_equal.
@@ -282,11 +283,11 @@ Proof.
          f_equal; omega.
 Qed.
 
-Lemma array_pred_shift: forall {A} (d: A) (lo hi lo' hi' mv : Z) P' P v p,
+Lemma array_pred_shift: forall {A}{d: Inhabitant A} (lo hi lo' hi' mv : Z) P' P v p,
   lo - lo' = mv ->
   hi - hi' = mv ->
- (forall i i', lo <= i < hi -> i - i' = mv -> P' i' (Znth (i-lo) v d) p = P i (Znth (i-lo) v d) p) ->
-  array_pred d lo' hi' P' v p = array_pred d lo hi P v p.
+ (forall i i', lo <= i < hi -> i - i' = mv -> P' i' (Znth (i-lo) v) p = P i (Znth (i-lo) v) p) ->
+  array_pred lo' hi' P' v p = array_pred lo hi P v p.
 Proof.
   intros.
   unfold array_pred.
@@ -300,11 +301,12 @@ Proof.
   rewrite H1; auto; omega.
 Qed.
 
-Lemma array_pred_ext_derives: forall {A} (d: A) lo hi P0 P1 v0 v1 p,
+Lemma array_pred_ext_derives: forall {A B} (dA: Inhabitant A) (dB: Inhabitant B)
+         lo hi P0 P1 (v0: list A) v1 p,
   (Zlength v0 = hi - lo -> Zlength v1 = hi - lo) ->
   (forall i, lo <= i < hi ->
-    P0 i (Znth (i-lo) v0 d) p |-- P1 i (Znth (i-lo) v1 d) p) ->
-  array_pred d lo hi P0 v0 p |-- array_pred d lo hi P1 v1 p.
+    P0 i (Znth (i-lo) v0) p |-- P1 i (Znth (i-lo) v1) p) ->
+  array_pred  lo hi P0 v0 p |-- array_pred lo hi P1 v1 p.
 Proof.
   intros.
   unfold array_pred.
@@ -319,18 +321,19 @@ Proof.
     apply H0. omega.
 Qed.
 
-Lemma array_pred_ext: forall {A} (d:A) lo hi P0 P1 v0 v1 p,
+Lemma array_pred_ext: forall {A B} (dA: Inhabitant A) (dB: Inhabitant B) lo hi P0 P1 
+        (v0: list A) (v1: list B) p,
   Zlength v0 = Zlength v1 ->
   (forall i, lo <= i < hi ->
-    P0 i (Znth (i-lo) v0 d) p = P1 i (Znth (i-lo) v1 d) p) ->
-  array_pred d lo hi P0 v0 p = array_pred d lo hi P1 v1 p.
+    P0 i (Znth (i-lo) v0) p = P1 i (Znth (i-lo) v1) p) ->
+  array_pred lo hi P0 v0 p = array_pred lo hi P1 v1 p.
 Proof.
   intros; apply pred_ext; apply array_pred_ext_derives; intros; try omega;
   rewrite H0; auto.
 Qed.
 
-Lemma at_offset_array_pred: forall  {A} (d:A) lo hi P v ofs p,
-  at_offset (array_pred d lo hi P v) ofs p = array_pred d lo hi (fun i v => at_offset (P i v) ofs) v p.
+Lemma at_offset_array_pred: forall  {A} {d: Inhabitant A} lo hi P v ofs p,
+  at_offset (array_pred lo hi P v) ofs p = array_pred lo hi (fun i v => at_offset (P i v) ofs) v p.
 Proof.
   intros.
   rewrite at_offset_eq.
@@ -343,8 +346,8 @@ Proof.
   auto.
 Qed.
 
-Lemma array_pred_sepcon: forall  {A} (d:A) lo hi P Q v p,
-  array_pred d lo hi P v p * array_pred d lo hi Q v p = array_pred d lo hi (P * Q) v p.
+Lemma array_pred_sepcon: forall  {A} {d: Inhabitant A} lo hi P Q v p,
+  array_pred lo hi P v p * array_pred lo hi Q v p = array_pred lo hi (P * Q) v p.
 Proof.
   intros.
   unfold array_pred.
@@ -420,7 +423,7 @@ Lemma struct_pred_ext: forall m {A0 A1} (P0: forall it, A0 it -> val -> mpred) (
 Proof.
   intros.
   apply pred_ext; eapply struct_pred_ext_derives; eauto;
-  intros; erewrite H0 by eauto; auto.
+  intros; erewrite H0 by eauto; auto;      apply derives_refl.
 Qed.
 
 Lemma struct_pred_not_member: forall m {A} (P: forall it, A it -> val -> mpred) (i: ident) v p,
@@ -715,13 +718,13 @@ Proof.
     simpl.
     exact H1.
   + rewrite compact_sum_inj_eq_spec in H0.
-    Focus 2. {
+    2:{
       clear - H.
       pose proof in_members_tail_no_replicate i0 _ _ _ H.
       intro HH; apply in_map with (f := fst) in HH.
       apply H0 in HH.
       tauto.
-    } Unfocus.
+    }
     destruct v0 as [v0 | v0], v1 as [v1 | v1]; try solve [inversion H0].
     - specialize (H1 i0).
       simpl in H1.
@@ -772,7 +775,7 @@ Proof.
   assert (forall it, members_union_inj v1 it <-> members_union_inj v0 it)
     by (intro it; specialize (H0 it); tauto).
   apply pred_ext; eapply union_pred_ext_derives; auto;
-  intros; erewrite H1 by eauto; auto.
+  intros; erewrite H1 by eauto; apply derives_refl.
 Qed.
 
 Lemma union_pred_derives_const: forall m {A} (P: forall it, A it -> val -> mpred) p v R,
@@ -1093,9 +1096,9 @@ Proof.
       apply IHm; auto.
 Qed.
 
-Lemma array_pred_local_facts: forall {A} (d: A) lo hi P v p Q,
+Lemma array_pred_local_facts: forall {A}{d: Inhabitant A} lo hi P v p Q,
   (forall i x, lo <= i < hi -> P i x p |-- !! Q x) ->
-  array_pred d lo hi P v p |-- !! (Zlength v = hi - lo /\ Forall Q v).
+  array_pred lo hi P v p |-- !! (Zlength v = hi - lo /\ Forall Q v).
 Proof.
   intros.
   unfold array_pred.
@@ -1107,26 +1110,26 @@ Proof.
   + apply prop_right; constructor.
   + replace (hi - lo) with (Z.succ (hi - Z.succ lo)) in * by omega.
     assert (hi - Z.succ lo >= 0).
-    Focus 1. {
+    {
       destruct (zlt (hi - Z.succ lo) 0); auto.
       assert (Z.succ (hi - Z.succ lo) <= 0) by omega.
       simpl length in H1.
       destruct (zeq (Z.succ (hi - Z.succ lo)) 0);
        [rewrite e in H1 | rewrite Z2Nat_neg in H1 by omega]; inv H1.
-    } Unfocus.
+    }
     rewrite Z2Nat.inj_succ in H1 |- * by omega.
     inv H1.
     simpl rangespec.
     replace (rangespec (Z.succ lo) (length v)
-              (fun i : Z => P i (Znth (i - lo) (a :: v) d)) p)
+              (fun i : Z => P i (Znth (i - lo) (a :: v))) p)
     with (rangespec (Z.succ lo) (length v)
-            (fun i : Z => P i (Znth (i - Z.succ lo) v d)) p).
-    Focus 2. {
+            (fun i : Z => P i (Znth (i - Z.succ lo) v)) p).
+    2:{
       apply rangespec_ext; intros.
       change v with (skipn 1 (a :: v)) at 1.
       rewrite <- Znth_succ by omega.
       auto.
-    } Unfocus.
+    }
     rewrite H3.
     eapply derives_trans; [apply sepcon_derives; [apply H | apply IHv; auto] |].
     - omega.
@@ -1208,47 +1211,45 @@ Section MEMORY_BLOCK_AGGREGATE.
 
 Context {cs: compspecs}.
 
-Lemma memory_block_array_pred: forall  {A} (d:A) sh t lo hi v b ofs,
-  0 <= ofs + sizeof t * lo /\ ofs + sizeof t * hi <= Int.modulus ->
+Lemma memory_block_array_pred: forall  {A}{d: Inhabitant A} sh t lo hi v b ofs,
+  0 <= ofs + sizeof t * lo /\ ofs + sizeof t * hi < Ptrofs.modulus ->
   0 <= lo <= hi ->
-  sizeof t * (hi - lo) < Int.modulus ->
   Zlength v = hi - lo ->
-  array_pred d lo hi
+  array_pred lo hi
     (fun i _ p => memory_block sh (sizeof t) (offset_val (sizeof t * i) p)) v
-    (Vptr b (Int.repr ofs)) =
-   memory_block sh (sizeof t * (hi - lo)) (Vptr b (Int.repr (ofs + sizeof t * lo))).
+    (Vptr b (Ptrofs.repr ofs)) =
+   memory_block sh (sizeof t * (hi - lo)) (Vptr b (Ptrofs.repr (ofs + sizeof t * lo))).
 Proof.
   intros.
   unfold array_pred.
-  rewrite prop_true_andp by auto; clear H2.
+  rewrite prop_true_andp by auto; clear H1.
   f_equal.
   remember (Z.to_nat (hi - lo)) as n eqn:HH.
-  revert lo HH H H0 H1 v; induction n; intros.
+  revert lo HH H H0 v; induction n; intros.
   + simpl.
     pose proof arith_aux00 _ _ (proj2 H0) HH.
-    rewrite H2, Z.mul_0_r, memory_block_zero_Vptr.
+    rewrite H1, Z.mul_0_r, memory_block_zero_Vptr.
     reflexivity.
   + simpl.
     pose proof arith_aux01 _ _ _ HH.
     solve_mod_modulus.
     pose_size_mult cenv_cs t (0 :: hi - Z.succ lo :: hi - lo :: nil).
-    rewrite IHn; [| apply arith_aux02; auto | omega | omega | omega | exact v].
+    rewrite IHn; [| apply arith_aux02; auto | omega | omega | exact v].
     replace (ofs + sizeof  t * Z.succ lo) with (ofs + sizeof t * lo + sizeof t) by omega.
     rewrite <- memory_block_split by (auto; omega).
     f_equal.
     omega.
 Qed.
 
-Lemma memory_block_array_pred': forall {A} (d:A)  sh t z b ofs,
+Lemma memory_block_array_pred': forall {A}{d: Inhabitant A} (a: A) sh t z b ofs,
   0 <= z ->
-  0 <= ofs /\ ofs + sizeof t * z <= Int.modulus ->
-  sizeof t * z < Int.modulus ->
-  array_pred d 0 z
+  0 <= ofs /\ ofs + sizeof t * z < Ptrofs.modulus ->
+  array_pred 0 z
      (fun i _ p =>
       memory_block sh (sizeof t) (offset_val (sizeof t * i) p))
-             (list_repeat (Z.to_nat z) d)
-     (Vptr b (Int.repr ofs))  =
-  memory_block sh (sizeof t * z) (Vptr b (Int.repr ofs)).
+             (list_repeat (Z.to_nat z) a)
+     (Vptr b (Ptrofs.repr ofs))  =
+  memory_block sh (sizeof t * z) (Vptr b (Ptrofs.repr ofs)).
 Proof.
   intros.
   rewrite memory_block_array_pred.
@@ -1261,13 +1262,13 @@ Qed.
 Lemma memory_block_struct_pred: forall sh m sz {A} (v: compact_prod (map A m)) b ofs,
   (m = nil -> sz = 0) ->
   members_no_replicate m = true ->
-  sizeof_struct cenv_cs 0 m <= sz < Int.modulus ->
-  0 <= ofs /\ ofs + sz <= Int.modulus ->
+  sizeof_struct cenv_cs 0 m <= sz < Ptrofs.modulus ->
+  0 <= ofs /\ ofs + sz < Ptrofs.modulus ->
   struct_pred m
    (fun it _ p =>
      (memory_block sh (field_offset_next cenv_cs (fst it) m sz - field_offset cenv_cs (fst it) m))
-     (offset_val (field_offset cenv_cs (fst it) m) p)) v (Vptr b (Int.repr ofs)) =
-  memory_block sh sz (Vptr b (Int.repr ofs)).
+     (offset_val (field_offset cenv_cs (fst it) m) p)) v (Vptr b (Ptrofs.repr ofs)) =
+  memory_block sh sz (Vptr b (Ptrofs.repr ofs)).
 Proof.
   unfold field_offset, Ctypes.field_offset, field_offset_next.
   intros sh m sz A v b ofs NIL_CASE NO_REPLI; intros.
@@ -1318,8 +1319,8 @@ Qed.
 
 Lemma memory_block_union_pred: forall sh m sz {A} (v: compact_sum (map A m)) b ofs,
   (m = nil -> sz = 0) ->
-  union_pred m (fun it _ => memory_block sh sz) v (Vptr b (Int.repr ofs)) =
-  memory_block sh sz (Vptr b (Int.repr ofs)).
+  union_pred m (fun it _ => memory_block sh sz) v (Vptr b (Ptrofs.repr ofs)) =
+  memory_block sh sz (Vptr b (Ptrofs.repr ofs)).
 Proof.
   intros sh m sz A v b ofs NIL_CASE; intros.
   destruct m as [| (i0, t0) m].
@@ -1340,7 +1341,7 @@ Open Scope Z.
 Open Scope logic.
 
 
-Definition array_pred: forall {A: Type} (d:A) (lo hi: Z) (P: Z -> A -> val -> mpred) (v: list A),
+Definition array_pred: forall {A: Type}{d: Inhabitant A} (lo hi: Z) (P: Z -> A -> val -> mpred) (v: list A),
     val -> mpred := @array_pred.
 
 Definition struct_pred: forall (m: members) {A: ident * type -> Type} (P: forall it, A it -> val -> mpred) (v: compact_prod (map A m)) (p: val), mpred := @struct_pred.
@@ -1353,52 +1354,55 @@ Definition struct_Prop: forall (m: members) {A: ident * type -> Type} (P: forall
 
 Definition union_Prop: forall (m: members) {A: ident * type -> Type} (P: forall it, A it -> Prop) (v: compact_sum (map A m)), Prop := union_Prop.
 
-Definition array_pred_len_0: forall {A} (d:A) lo hi P p,
+Definition array_pred_len_0: forall {A}{d: Inhabitant A} lo hi P p,
   hi = lo ->
-  array_pred d lo hi P nil p = emp
+  array_pred lo hi P nil p = emp
 := @array_pred_len_0.
 
-Definition array_pred_len_1: forall {A} (d:A) i P v p,
-  array_pred d i (i + 1) P (v :: nil) p =  P i v p
+Definition array_pred_len_1: forall {A}{d: Inhabitant A} i P v p,
+  array_pred i (i + 1) P (v :: nil) p =  P i v p
 := @array_pred_len_1.
 
-Definition split_array_pred: forall  {A} (d:A) lo mid hi P v p,
+Definition split_array_pred: forall  {A}{d: Inhabitant A} lo mid hi P v p,
   lo <= mid <= hi ->
   Zlength v = (hi-lo) ->
-  array_pred d lo hi P v p =
-  array_pred d lo mid P (sublist 0 (mid-lo) v) p *
-  array_pred d mid hi P (sublist (mid-lo) (hi-lo) v) p
+  array_pred lo hi P v p =
+  array_pred lo mid P (sublist 0 (mid-lo) v) p *
+  array_pred mid hi P (sublist (mid-lo) (hi-lo) v) p
 := @split_array_pred.
 
-Definition array_pred_shift: forall {A} (d:A) lo hi lo' hi' mv P' P v p,
+Definition array_pred_shift: forall {A} {d: Inhabitant A} lo hi lo' hi' mv 
+              P' P v p,
   lo - lo' = mv ->
   hi - hi' = mv ->
-  (forall i i', lo <= i < hi -> i - i' = mv -> P' i' (Znth (i - lo) v d) p = P i (Znth (i - lo) v d) p) ->
-  array_pred d lo' hi' P' v p = array_pred d lo hi P v p
+  (forall i i', lo <= i < hi -> i - i' = mv ->
+           P' i' (Znth (i - lo) v) p = P i (Znth (i - lo) v) p) ->
+  array_pred lo' hi' P' v p = array_pred lo hi P v p
 := @array_pred_shift.
 
 Definition array_pred_ext_derives:
-  forall {A} (d:A) lo hi P0 P1 v0 v1 p,
+  forall {A B} {dA: Inhabitant A} {dB: Inhabitant B} lo hi P0 P1 
+            (v0: list A) (v1: list B) p,
   (Zlength v0 = hi - lo -> Zlength v1 = hi - lo) ->
   (forall i, lo <= i < hi ->
-      P0 i (Znth (i-lo) v0 d) p |-- P1 i (Znth (i-lo) v1 d) p) ->
-  array_pred d lo hi P0 v0 p |-- array_pred d lo hi P1 v1 p
+      P0 i (Znth (i-lo) v0) p |-- P1 i (Znth (i-lo) v1) p) ->
+  array_pred lo hi P0 v0 p |-- array_pred lo hi P1 v1 p
 := @array_pred_ext_derives.
 
 Definition array_pred_ext:
-  forall {A} (d:A) lo hi P0 P1 v0 v1 p,
+  forall {A B} {dA: Inhabitant A} {dB: Inhabitant B} lo hi P0 P1 (v0: list A) (v1: list B)  p,
   Zlength v0 = Zlength v1 ->
   (forall i, lo <= i < hi ->
-     P0 i (Znth (i - lo) v0 d) p = P1 i (Znth (i - lo) v1 d) p) ->
-  array_pred d lo hi P0 v0 p = array_pred d lo hi P1 v1 p
+     P0 i (Znth (i - lo) v0) p = P1 i (Znth (i - lo) v1) p) ->
+  array_pred lo hi P0 v0 p = array_pred lo hi P1 v1 p
 := @array_pred_ext.
 
-Definition at_offset_array_pred: forall {A} (d:A) lo hi P v ofs p,
-  at_offset (array_pred d lo hi P v) ofs p = array_pred d lo hi (fun i v => at_offset (P i v) ofs) v p
+Definition at_offset_array_pred: forall {A} {d: Inhabitant A} lo hi P v ofs p,
+  at_offset (array_pred lo hi P v) ofs p = array_pred lo hi (fun i v => at_offset (P i v) ofs) v p
 := @at_offset_array_pred.
 
-Definition array_pred_sepcon: forall  {A} (d:A) lo hi P Q v p,
-  array_pred d lo hi P v p * array_pred d lo hi Q v p = array_pred d lo hi (P * Q) v p
+Definition array_pred_sepcon: forall  {A} {d: Inhabitant A} lo hi P Q v p,
+  array_pred lo hi P v p * array_pred lo hi Q v p = array_pred lo hi (P * Q) v p
 := @array_pred_sepcon.
 
 Definition struct_pred_ramif: forall m {A} (P: forall it, A it -> val -> mpred) (i: ident) v p d,
@@ -1509,9 +1513,9 @@ Definition union_Prop_proj: forall m (F: ident * type -> Type) (P: forall it, F 
   P (i, field_type i m) (proj_union i m v d)
 := @union_Prop_proj.
 
-Definition array_pred_local_facts: forall {A} (d: A) lo hi P v p Q,
+Definition array_pred_local_facts: forall {A} {d: Inhabitant A} lo hi P v p Q,
   (forall i x, lo <= i < hi -> P i x p |-- !! Q x) ->
-  array_pred d lo hi P v p |-- !! (Zlength v = hi - lo /\ Forall Q v)
+  array_pred lo hi P v p |-- !! (Zlength v = hi - lo /\ Forall Q v)
 := @array_pred_local_facts.
 
 Definition struct_pred_local_facts: forall m {A} (P: forall it, A it -> val -> mpred)v p (R: forall it, A it -> Prop),
@@ -1528,7 +1532,7 @@ Definition union_pred_local_facts: forall m {A} (P: forall it, A it -> val -> mp
 
 End aggregate_pred.
 
-Require Import floyd.reptype_lemmas.
+Require Import VST.floyd.reptype_lemmas.
 
 (******************************************
 
@@ -1777,36 +1781,35 @@ Definition union_value_fits_aux_spec: forall {cs: compspecs} m m0 v P,
 := @union_value_fits_aux_spec.
 
 Definition memory_block_array_pred:
-  forall {cs: compspecs} (A : Type) (d : A) sh t z b ofs,
+  forall {cs: compspecs} {A : Type} {d : Inhabitant A} (a: A) sh t z b ofs,
   0 <= z ->
-  0 <= ofs /\ ofs + sizeof t * z <= Int.modulus ->
-  sizeof t * z < Int.modulus ->
-  array_pred d 0 z
+  0 <= ofs /\ ofs + sizeof t * z < Ptrofs.modulus ->
+  array_pred 0 z
      (fun i _ p =>
       memory_block sh (sizeof t)
-        (offset_val (sizeof t * i) p)) (list_repeat (Z.to_nat z) d)
-     (Vptr b (Int.repr ofs))  =
-  memory_block sh (sizeof t * z) (Vptr b (Int.repr ofs))
+        (offset_val (sizeof t * i) p)) (list_repeat (Z.to_nat z) a)
+     (Vptr b (Ptrofs.repr ofs))  =
+  memory_block sh (sizeof t * z) (Vptr b (Ptrofs.repr ofs))
 := @memory_block_array_pred'.
 
 Definition memory_block_struct_pred:
   forall {cs: compspecs} sh m sz {A} (v: compact_prod (map A m)) b ofs,
   (m = nil -> sz = 0) ->
   members_no_replicate m = true ->
-  sizeof_struct cenv_cs 0 m <= sz < Int.modulus ->
-  0 <= ofs /\ ofs + sz <= Int.modulus ->
+  sizeof_struct cenv_cs 0 m <= sz < Ptrofs.modulus ->
+  0 <= ofs /\ ofs + sz < Ptrofs.modulus ->
   struct_pred m
    (fun it _ p =>
      (memory_block sh (field_offset_next cenv_cs (fst it) m sz - field_offset cenv_cs (fst it) m))
-     (offset_val (field_offset cenv_cs (fst it) m) p)) v (Vptr b (Int.repr ofs)) =
-  memory_block sh sz (Vptr b (Int.repr ofs))
+     (offset_val (field_offset cenv_cs (fst it) m) p)) v (Vptr b (Ptrofs.repr ofs)) =
+  memory_block sh sz (Vptr b (Ptrofs.repr ofs))
 := @memory_block_struct_pred.
 
 Definition memory_block_union_pred:
   forall sh m sz {A} (v: compact_sum (map A m)) b ofs,
   (m = nil -> sz = 0) ->
-  union_pred m (fun it _ => memory_block sh sz) v (Vptr b (Int.repr ofs)) =
-  memory_block sh sz (Vptr b (Int.repr ofs))
+  union_pred m (fun it _ => memory_block sh sz) v (Vptr b (Ptrofs.repr ofs)) =
+  memory_block sh sz (Vptr b (Ptrofs.repr ofs))
 := @memory_block_union_pred.
 
 End auxiliary_pred.

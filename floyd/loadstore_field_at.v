@@ -1,12 +1,12 @@
-Require Import floyd.base2.
-Require Import floyd.client_lemmas.
-Require Import floyd.nested_field_lemmas.
-Require Import floyd.efield_lemmas.
-Require Import floyd.mapsto_memory_block.
-Require Import floyd.reptype_lemmas.
-Require Import floyd.data_at_rec_lemmas.
-Require Import floyd.field_at.
-Require Import floyd.loadstore_mapsto.
+Require Import VST.floyd.base2.
+Require Import VST.floyd.client_lemmas.
+Require Import VST.floyd.nested_field_lemmas.
+Require Import VST.floyd.efield_lemmas.
+Require Import VST.floyd.mapsto_memory_block.
+Require Import VST.floyd.reptype_lemmas.
+Require Import VST.floyd.data_at_rec_lemmas.
+Require Import VST.floyd.field_at.
+Require Import VST.floyd.loadstore_mapsto.
 
 Local Open Scope logic.
 
@@ -110,15 +110,15 @@ Proof.
   intros.
   pose proof is_neutral_cast_by_value _ _ H0.
   assert_PROP (typeof (nested_efield e1 efs tts) = nested_field_type t_root gfs).
-  Focus 1. {
+  {
     eapply derives_trans; [exact H9 |].
     intros rho; simpl; unfold local, lift1; unfold_lift; normalize.
     apply prop_right.
     symmetry; eapply typeof_nested_efield; eauto.
-  } Unfocus.
+  }
   rewrite H11 in H10.
   assert_PROP (field_compatible t_root gfs p).
-  Focus 1. {
+  {
     erewrite SEP_nth_isolate, <- insert_SEP by eauto.
     apply andp_left2;
     apply derives_left_sepcon_right_corable; auto.
@@ -126,7 +126,7 @@ Proof.
     eapply derives_trans; [apply H7 |].
     rewrite field_at_compatible'.
     normalize.
-  } Unfocus.
+  }
   eapply semax_load_nth_ram; try eassumption;
   [ idtac
   | idtac
@@ -273,7 +273,7 @@ Lemma semax_cast_load_nth_ram_field_at :
     ENTAIL Delta, PROPx P (LOCALx Q (SEPx R)) |--
       local (`(eq (field_address t_root gfs p)) (eval_lvalue e1)) ->
     nth_error R n = Some Pre ->
-    classify_cast (nested_field_type t_root gfs) t_to <> cast_case_p2bool ->
+     cast_pointer_to_bool (nested_field_type t_root gfs) t_to = false ->
     readable_share sh ->
     Pre |-- field_at sh t_root gfs v_reptype p * TT ->
     JMeq v_reptype v_val ->
@@ -309,7 +309,7 @@ Lemma semax_max_path_field_cast_load_nth_ram:
       (p v: val) (v' : reptype (nested_field_type t_root gfs)) lr,
       typeof_temp Delta id = Some t ->
       type_is_by_value (typeof (nested_efield e1 efs tts)) = true ->
-      classify_cast (typeof (nested_efield e1 efs tts)) t <> cast_case_p2bool ->
+     cast_pointer_to_bool (typeof (nested_efield e1 efs tts)) t = false ->
       readable_share sh ->
       LR_of_type t_root = lr ->
       type_is_volatile (typeof (nested_efield e1 efs tts)) = false ->
@@ -333,22 +333,22 @@ Lemma semax_max_path_field_cast_load_nth_ram:
 Proof.
   intros until 2. intro HCAST; intros.
   assert_PROP (typeof (nested_efield e1 efs tts) = nested_field_type t_root gfs).
-  Focus 1. {
+  {
     eapply derives_trans; [exact H9 |].
     intros rho; simpl; unfold local, lift1; unfold_lift; normalize.
     apply prop_right.
     symmetry; eapply typeof_nested_efield; eauto.
-  } Unfocus.
+  }
   rewrite H10 in H0.
   assert_PROP (field_compatible t_root gfs p).
-  Focus 1. {
+  {
     erewrite SEP_nth_isolate, <- insert_SEP by eauto.
     apply andp_left2; apply derives_left_sepcon_right_corable; auto.
     intro rho; unfold_lift; simpl.
     eapply derives_trans; [apply H7 |].
     rewrite field_at_compatible'.
     normalize.
-  } Unfocus.
+  }
   rewrite H10.
   eapply semax_cast_load_nth_ram; try eassumption;
   [ idtac |  rewrite <- H10; eassumption | idtac | apply andp_right].
@@ -452,21 +452,21 @@ Lemma semax_max_path_field_store_nth_ram:
 Proof.
   intros.
   assert_PROP (typeof (nested_efield e1 efs tts) = nested_field_type t_root gfs).
-  Focus 1. {
+  {
     eapply derives_trans; [exact H9 |].
     intros rho; simpl; unfold local, lift1; unfold_lift; normalize.
     apply prop_right.
     symmetry; eapply typeof_nested_efield; eauto.
-  } Unfocus.
+  }
   assert_PROP (field_compatible t_root gfs p).
-  Focus 1. {
+  {
     erewrite SEP_nth_isolate, <- insert_SEP by eauto.
     apply andp_left2; apply derives_left_sepcon_right_corable; auto.
     intro rho; unfold_lift; simpl.
     eapply derives_trans; [apply H6 |].
     unfold field_at_; rewrite (field_at_compatible' _ _ _ (default_val _)).
     normalize.
-  } Unfocus.
+  }
   rewrite H10 in H.
   eapply semax_store_nth_ram; eauto.
   4: apply andp_right.

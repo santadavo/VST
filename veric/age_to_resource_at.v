@@ -1,11 +1,10 @@
 Require Import compcert.common.Memory.
-Require Import msl.Coqlib2.
-Require Import msl.eq_dec.
-Require Import msl.seplog.
-Require Import msl.ageable.
-Require Import msl.age_to.
-Require Import veric.coqlib4.
-Require Import veric.compcert_rmaps.
+Require Import VST.msl.Coqlib2.
+Require Import VST.msl.eq_dec.
+Require Import VST.msl.ageable.
+Require Import VST.msl.age_to.
+Require Import VST.veric.coqlib4.
+Require Import VST.veric.compcert_rmaps.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -41,14 +40,14 @@ Proof.
   apply HR.
 Qed.
 
-Lemma age_yes_sat {Phi Phi' phi phi' l z sh sh'} (R : pred rmap) :
+Lemma age_yes_sat {Phi Phi' phi phi' l z z' sh sh'} (R : pred rmap) :
   level Phi = level phi ->
   age Phi Phi' ->
   age phi phi' ->
   app_pred R phi ->
-  Phi  @ l = YES sh sh' (LK z) (SomeP rmaps.Mpred (fun _ => R)) ->
+  Phi  @ l = YES sh sh' (LK z z') (SomeP rmaps.Mpred (fun _ => R)) ->
   app_pred (approx (S (level phi')) R) phi' /\
-  Phi' @ l = YES sh sh' (LK z) (SomeP rmaps.Mpred (fun _ => approx (level Phi') R)).
+  Phi' @ l = YES sh sh' (LK z z') (SomeP rmaps.Mpred (fun _ => approx (level Phi') R)).
 Proof.
   intros L A Au SAT AT.
   pose proof (app_pred_age Au SAT) as SAT'.
@@ -78,8 +77,6 @@ Proof.
   destruct D as [D | D]; swap 1 2.
   - rewrite age_to_ge; auto.
     rewrite <-resource_at_approx.
-    change compcert_rmaps.R.resource_fmap with resource_fmap.
-    change compcert_rmaps.R.approx with approx.
     match goal with
       |- _ = ?map ?f1 ?f2 (?map ?g1 ?g2 ?r) => transitivity (map (f1 oo g1) (g2 oo f2) r)
     end; swap 1 2.
@@ -122,4 +119,22 @@ Proof.
         omega.
         rewrite approx'_oo_approx; auto.
         omega.
+Qed.
+
+Lemma age_to_ghost_of phi n : ghost_of (age_to n phi) = ghost_fmap (approx n) (approx n) (ghost_of phi).
+Proof.
+  pose proof (age_to_ageN n phi).
+  forget (age_to n phi) as phi'.
+  remember (level phi - n) as n'.
+  revert dependent n; revert dependent phi; induction n'; intros.
+  - inv H.
+    rewrite <- ghost_of_approx, ghost_fmap_fmap, approx'_oo_approx, approx_oo_approx' by omega; auto.
+  - change (ageN (S n') phi) with
+      (match age1 phi with Some w' => ageN n' w' | None => None end) in H.
+    destruct (age1 phi) eqn: Hage; [|discriminate].
+    pose proof (age_level _ _ Hage) as Hl.
+    assert (n' = level r - n).
+    { rewrite Hl, <- minus_Sn_m in Heqn' by omega; inversion Heqn'; auto. }
+    rewrite (IHn' _ H n), (age1_ghost_of _ _ Hage) by (auto; omega).
+    rewrite ghost_fmap_fmap, approx_oo_approx', approx'_oo_approx by omega; auto.
 Qed.

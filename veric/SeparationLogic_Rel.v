@@ -1,5 +1,5 @@
-Require Import veric.SeparationLogic.
-Require Export veric.xexpr_rel.
+Require Import VST.veric.SeparationLogic.
+Require Export VST.veric.xexpr_rel.
 
 (*
 
@@ -148,4 +148,4 @@ Qed.
 
 *)
 
-Opaque mpred Nveric Sveric Cveric Iveric Rveric Sveric SIveric SRveric.
+Opaque mpred Nveric Sveric Cveric Iveric Rveric Sveric SIveric SRveric Bveric.

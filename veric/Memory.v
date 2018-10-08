@@ -1,7 +1,8 @@
 Require Import Coq.Arith.EqNat.
 Require Import Coq.Relations.Relations.
-
+(*
 Require Import compcert.exportclight.Clightdefs.
+Require Import compcert.cfrontend.Ctypes. (*NEW*)*)
 Require Import compcert.lib.Axioms.
 Require Import compcert.lib.Coqlib.
 Require Import compcert.lib.Integers.
@@ -12,24 +13,27 @@ Require Import compcert.common.Values.
 Require Import compcert.common.Memdata.
 Require Import compcert.common.Memtype.
 Require Import compcert.common.Memory.
-Require Export sepcomp.Address.
+Require Export VST.sepcomp.Address.
 
 Lemma range_dec: forall a b c: Z, {a <= b < c}+{~(a <= b < c)}.
 Proof. intros. destruct (zle a b). destruct (zlt b c). left; split; auto.
   right;  omega. right; omega.
 Qed.
 
-Require Export msl.eq_dec.
+Require Export VST.msl.eq_dec.
 
 Instance EqDec_ident: EqDec ident := ident_eq.
 
 Instance EqDec_byte: EqDec byte := Byte.eq_dec.
 
-Instance EqDec_type: EqDec type := type_eq.
+(*Moved to base.v so that this file does not need to Import Clightdefs ad Ctypes
+  Instance EqDec_type: EqDec type := type_eq.*)
 Instance EqDec_int: EqDec int := Int.eq_dec.
 Instance EqDec_int64: EqDec int64 := Int64.eq_dec.
 Instance EqDec_float: EqDec float := Float.eq_dec.
 Instance EqDec_float32: EqDec float32 := Float32.eq_dec.
+
+Instance EqDex_ptr : EqDec ptrofs := Ptrofs.eq_dec. (*NEW*)
 
 Instance EqDec_memval: EqDec memval.
 Proof.

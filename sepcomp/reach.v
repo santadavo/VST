@@ -9,12 +9,12 @@ Require Import compcert.common.Events.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
 
-Require Import msl.Extensionality.
+Require Import VST.msl.Extensionality.
 
-Require Import sepcomp.mem_lemmas.
-Require Import sepcomp.semantics.
-Require Import sepcomp.effect_semantics.
-Require Import sepcomp.structured_injections.
+Require Import VST.sepcomp.mem_lemmas.
+Require Import VST.sepcomp.semantics.
+Require Import VST.sepcomp.effect_semantics.
+Require Import VST.sepcomp.structured_injections.
 
 Definition vis mu := fun b => locBlocksSrc mu b || frgnBlocksSrc mu b.
 Definition visTgt mu := fun b => locBlocksTgt mu b || frgnBlocksTgt mu b.
@@ -1725,8 +1725,8 @@ Proof. intros.
                       destruct qq; inv H.
                       destruct (local_DomRng _ WD _ _ _ H1). rewrite H; trivial.
                   unfold vis; intros. apply orb_true_iff in H.
-                  destruct H. Focus 2. unfold join. destruct (frgnSrc _ WD _ H) as [? [? [? ?]]].
-                       eapply mappedI_true. rewrite H0. reflexivity.
+                  destruct H. 2:{ unfold join. destruct (frgnSrc _ WD _ H) as [? [? [? ?]]].
+                       eapply mappedI_true. rewrite H0. reflexivity. }
                   specialize (locBlocksSrc_externNone _ WD _ H). intros EXT.
                   destruct (joinD_Some _ _ _ _ _ AIb); clear AIb.
                     rewrite H0 in EXT; discriminate.
@@ -1852,7 +1852,7 @@ Proof.
   rewrite Genv.find_funct_find_funct_ptr in H.
   destruct (H0 _ _ H).
   rewrite H1 in H4; inv H4.
-  rewrite Int.add_zero. trivial.
+  rewrite Ptrofs.add_zero. trivial.
 Qed.
 
 End globalfunction_ptr_inject.

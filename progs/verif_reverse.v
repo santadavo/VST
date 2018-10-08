@@ -5,7 +5,7 @@
 (** First, import the entire Floyd proof automation system, which
  ** includes the VeriC program logic and the MSL theory of separation logic
  **)
-Require Import floyd.proofauto.
+Require Import VST.floyd.proofauto.
 
 (** Import the theory of list segments.  This is not, strictly speaking,
  ** part of the Floyd system.  In principle, any user of Floyd can build
@@ -15,7 +15,7 @@ Require Import floyd.proofauto.
  ** as the theory uses Coq's dependent types to handle user-defined
  ** record fields.
  **)
-Require Import progs.list_dt. Import LsegSpecial.
+Require Import VST.progs.list_dt. Import LsegSpecial.
 
 (** Import the [reverse.v] file, which is produced by CompCert's clightgen
  ** from reverse.c.   The file reverse.v defines abbreviations for identifiers
@@ -23,7 +23,7 @@ Require Import progs.list_dt. Import LsegSpecial.
  ** It also defines "prog", which is the entire abstract syntax tree
  ** of the C program in the reverse.c file.
  **)
-Require Import progs.reverse.
+Require Import VST.progs.reverse.
 
 (* The C programming language has a special namespace for struct
 ** and union identifiers, e.g., "struct foo {...}".  Some type-based operators
@@ -58,7 +58,7 @@ Definition sumlist_spec :=
      PROP(readable_share sh)
      LOCAL (temp _p p)
      SEP (lseg LS sh (map Vint contents) p nullval)
-  POST [ tint ]
+  POST [ tuint ]
      PROP()
      LOCAL(temp ret_temp (Vint (sum_int contents)))
      SEP (lseg LS sh (map Vint contents) p nullval).
@@ -81,15 +81,14 @@ Definition reverse_spec :=
  ** from the program (prog) by the "main_pre" operator.  **)
 Definition main_spec :=
  DECLARE _main
-  WITH u : unit
-  PRE  [] main_pre prog nil u
-  POST [ tint ] main_post prog nil u.
+  WITH gv : globals
+  PRE  [] main_pre prog nil gv
+  POST [ tint ]
+     PROP() LOCAL (temp ret_temp (Vint (Int.repr (3+2+1)))) SEP(TT).
 
-(** Declare all the functions, in exactly the same order as they
- ** appear in reverse.c (and in reverse.v).
- **)
+(** List all the function-specs, to form the global hypothesis *)
 Definition Gprog : funspecs :=   ltac:(with_library prog [
-    sumlist_spec; reverse_spec; main_spec]).
+    sumlist_spec; main_spec; reverse_spec]).
 
 (** A little equation about the list_cell predicate *)
 Lemma list_cell_eq: forall sh i p ,
@@ -220,69 +219,72 @@ Qed.
  **)
 
 Lemma setup_globals:
- forall Delta x,
-  (glob_types Delta) ! _three = Some (tarray t_struct_list 3) ->
+ forall Delta gv,
+  PTree.get _three (glob_types Delta) = Some (tarray t_struct_list 3) ->
   ENTAIL Delta, PROP  ()
-   LOCAL  (gvar _three x)
+   LOCAL  (gvars gv)
    SEP
-   (mapsto Ews tuint (offset_val 0 x) (Vint (Int.repr 1));
-    mapsto Ews (tptr t_struct_list) (offset_val 4 x)
-        (offset_val 8 x);
-   mapsto Ews tuint (offset_val 8 x) (Vint (Int.repr 2));
-   mapsto Ews (tptr t_struct_list) (offset_val 12 x)
-       (offset_val 16 x);
-   mapsto Ews tuint (offset_val 16 x) (Vint (Int.repr 3));
-   mapsto Ews tuint (offset_val 20 x) (Vint (Int.repr 0)))
-  |-- PROP() LOCAL(gvar _three x)
+   (data_at Ews tuint (Vint (Int.repr 1)) (gv _three);
+    mapsto Ews (tptr t_struct_list) (offset_val 4 (gv _three))
+        (offset_val 8 (gv _three));
+   mapsto Ews tuint (offset_val 8 (gv _three)) (Vint (Int.repr 2));
+   mapsto Ews (tptr t_struct_list) (offset_val 12 (gv _three))
+       (offset_val 16 (gv _three));
+   mapsto Ews tuint (offset_val 16 (gv _three)) (Vint (Int.repr 3));
+   mapsto Ews tuint (offset_val 20 (gv _three)) (Vint (Int.repr 0)))
+  |-- PROP() LOCAL(gvars gv)
         SEP (lseg LS Ews (map Vint (Int.repr 1 :: Int.repr 2 :: Int.repr 3 :: nil))
-                  x nullval).
+                  (gv _three) nullval).
 Proof.
- intros.
-  go_lower.
+  intros.
+  go_lowerx.
+  pose proof (gvars_denote_HP _ _ _ _ _ H2 H0 H).
   rewrite !prop_true_andp by auto.
+  assert_PROP (size_compatible tuint (gv _three) /\ align_compatible tuint (gv _three)) by (entailer!; clear - H5; hnf in H5; intuition).
+  rewrite <- mapsto_data_at with (v := Vint(Int.repr 1)); try intuition. 
+  clear H0.
   rewrite <- (sepcon_emp (mapsto _ _ (offset_val 20 _) _)).
-  assert (FC: field_compatible (tarray t_struct_list 3) [] x)
+  assert (FC: field_compatible (tarray t_struct_list 3) [] (gv _three))
     by auto with field_compatible.
   match goal with |- ?A |-- _ => set (a:=A) end.
-  replace x with (offset_val 0 x) by normalize.
+  replace (gv _three) with (offset_val 0 (gv _three)) by normalize.
   subst a.
-
+  rewrite (sepcon_emp (lseg _ _ _ _ _)).
+  rewrite sepcon_emp.
   repeat
-    match goal with |- _ * (mapsto _ _ _ ?q * _) |-- lseg _ _ _ (offset_val ?n _) _ =>
-    assert (FC': field_compatible t_struct_list [] (offset_val n x));
+  match goal with |- _ * (mapsto _ _ _ ?q * _) |-- lseg _ _ _ (offset_val ?n _) _ =>
+    assert (FC': field_compatible t_struct_list [] (offset_val n (gv _three)));
       [apply (@field_compatible_nested_field CompSpecs (tarray t_struct_list 3)
-         [ArraySubsc (n/8)] x);
+         [ArraySubsc (n/8)] (gv _three));
        simpl;
        unfold field_compatible in FC |- *; simpl in FC |- *;
        assert (0 <= n/8 < 3) by (cbv [Z.div]; simpl; omega);
        tauto
       |];
     apply @lseg_unroll_nonempty1 with q;
-      [destruct x; try contradiction; intro Hx; inv Hx | normalize; reflexivity | ];
+      [destruct (gv _three); try contradiction; intro Hx; inv Hx | normalize; reflexivity | ];
     rewrite list_cell_eq by auto;
     do 2 (apply sepcon_derives;
       [ unfold field_at; rewrite prop_true_andp by auto with field_compatible;
-        unfold data_at_rec, at_offset; simpl; normalize | ]);
+        unfold data_at_rec, at_offset; simpl; normalize; try apply derives_refl | ]);
     clear FC'
     end.
-
-  rewrite mapsto_tuint_tptr_nullval; auto.
+  rewrite mapsto_tuint_tptr_nullval; auto. apply derives_refl.
   rewrite @lseg_nil_eq.
-  rewrite prop_true_andp; auto.
-  split; reflexivity.
+  entailer!.
 Qed.
 
 Lemma body_main:  semax_body Vprog Gprog f_main main_spec.
 Proof.
-name three _three.
 start_function.
 change (Tstruct _ _) with t_struct_list.
 fold noattr. fold (tptr t_struct_list).
 eapply semax_pre; [
-  eapply ENTAIL_trans; [ | apply (setup_globals Delta three); auto ] | ].
+  eapply ENTAIL_trans; [ | apply (setup_globals Delta gv); auto ] | ].
  entailer!.
+*
 forward_call (*  r = reverse(three); *)
-  (Ews, map Vint [Int.repr 1; Int.repr 2; Int.repr 3], three).
+  (Ews, map Vint [Int.repr 1; Int.repr 2; Int.repr 3], gv _three).
 Intros r'.
 rewrite <- map_rev. simpl rev.
 forward_call  (* s = sumlist(r); *)
@@ -292,12 +294,13 @@ Qed.
 
 Existing Instance NullExtension.Espec.
 
-Lemma all_funcs_correct:
-  semax_func Vprog Gprog (prog_funct prog) Gprog.
+Lemma prog_correct:
+  semax_prog prog Vprog Gprog.
 Proof.
-unfold Gprog, prog, prog_funct; simpl.
+prove_semax_prog.
 semax_func_cons body_sumlist.
 semax_func_cons body_reverse.
 semax_func_cons body_main.
 Qed.
+
 

@@ -1,50 +1,53 @@
-Require Import floyd.base2.
-Require Import floyd.sublist.
-Require Import floyd.client_lemmas.
-Require Import floyd.closed_lemmas.
-Require Import floyd.compare_lemmas.
-Require Import floyd.semax_tactics.
-Require Import floyd.forward.
-Require Import floyd.call_lemmas.
-Require Import floyd.forward_lemmas.
-Require Import floyd.for_lemmas.
-Require Import floyd.nested_pred_lemmas.
-Require Import floyd.nested_field_lemmas.
-Require Import floyd.efield_lemmas.
-Require Import floyd.mapsto_memory_block.
-Require Import floyd.aggregate_type.
-Require floyd.aggregate_pred. Import floyd.aggregate_pred.aggregate_pred.
-Require Import floyd.reptype_lemmas.
-Require Import floyd.data_at_rec_lemmas.
-Require Import floyd.field_at.
-Require Import floyd.field_compat.
-Require Import floyd.stronger.
-Require Import floyd.loadstore_mapsto.
-Require Import floyd.loadstore_field_at.
-Require Import floyd.nested_loadstore.
-Require Import floyd.local2ptree_denote.
-Require Import floyd.local2ptree_eval.
-Require Import floyd.proj_reptype_lemmas.
-Require Import floyd.replace_refill_reptype_lemmas.
-Require Import floyd.sc_set_load_store.
-(*Require Import floyd.unfold_data_at.*)
-Require Import floyd.entailer.
-Require Import floyd.globals_lemmas.
-Require Import floyd.diagnosis.
-Require Import floyd.freezer.
+Require Import VST.floyd.base2.
+Require Import VST.floyd.sublist.
+Require Import VST.floyd.client_lemmas.
+Require Import VST.floyd.closed_lemmas.
+Require Import VST.floyd.compare_lemmas.
+Require Import VST.floyd.semax_tactics.
+Require Import VST.floyd.forward.
+Require Import VST.floyd.call_lemmas.
+Require Import VST.floyd.forward_lemmas.
+Require Import VST.floyd.for_lemmas.
+Require Import VST.floyd.nested_pred_lemmas.
+Require Import VST.floyd.nested_field_lemmas.
+Require Import VST.floyd.efield_lemmas.
+Require Import VST.floyd.mapsto_memory_block.
+Require Import VST.floyd.aggregate_type.
+Require VST.floyd.aggregate_pred. Import VST.floyd.aggregate_pred.aggregate_pred.
+Require Import VST.floyd.reptype_lemmas.
+Require Import VST.floyd.data_at_rec_lemmas.
+Require Import VST.floyd.field_at.
+Require Import VST.floyd.field_compat.
+Require Import VST.floyd.stronger.
+Require Import VST.floyd.loadstore_mapsto.
+Require Import VST.floyd.loadstore_field_at.
+Require Import VST.floyd.nested_loadstore.
+Require Import VST.floyd.local2ptree_denote.
+Require Import VST.floyd.local2ptree_eval.
+Require Import VST.floyd.proj_reptype_lemmas.
+Require Import VST.floyd.replace_refill_reptype_lemmas.
+Require Import VST.floyd.sc_set_load_store.
+(*Require Import VST.floyd.unfold_data_at.*)
+Require Import VST.floyd.entailer.
+Require Import VST.floyd.globals_lemmas.
+Require Import VST.floyd.diagnosis.
+Require Import VST.floyd.freezer.
 Import ListNotations.
+Import String.
 
 Definition body_lemma_of_funspec  {Espec: OracleKind} (ef: external_function) (f: funspec) :=
   match f with mk_funspec sig _ A P Q _ _ =>
     semax_external (map fst (fst sig)) ef A P Q
   end.
 
-Definition try_spec (prog: program) (name: string) (spec: funspec) : list (ident*funspec) :=
- match ext_link_prog' (prog_defs prog) name with
+Definition try_spec  (name: string) (spec: funspec) : 
+   list (ident * globdef Clight.fundef type) -> list (ident*funspec) :=
+fun defs => 
+ match ext_link_prog' defs name with
  | Some id => [(id,spec)]
  | None => nil
  end.
-Arguments try_spec prog name spec / .
+Arguments try_spec name spec defs / .
 
 Definition exit_spec' :=
  WITH u: unit
@@ -53,8 +56,7 @@ Definition exit_spec' :=
  POST [ tvoid ]
    PROP(False) LOCAL() SEP().
 
-Definition exit_spec (prog: program) := try_spec prog "exit" exit_spec'.
-Arguments exit_spec prog / .
+Definition exit_spec := try_spec "exit" exit_spec'.
 
 Parameter body_exit:
  forall {Espec: OracleKind},
@@ -63,81 +65,99 @@ Parameter body_exit:
        {| sig_args := AST.Tint :: nil; sig_res := None; sig_cc := cc_default |})
    exit_spec'.
 
-Parameter malloc_token : share -> Z -> val -> mpred.
+Parameter malloc_token : forall {cs: compspecs}, share -> type -> val -> mpred.
 Parameter malloc_token_valid_pointer:
-  forall sh n p, malloc_token sh n p |-- valid_pointer p.
+  forall {cs: compspecs} sh t p, malloc_token sh t p |-- valid_pointer p.
 Hint Resolve malloc_token_valid_pointer : valid_pointer.
-Parameter malloc_token_local_facts:
-  forall sh n p, malloc_token sh n p |-- !! malloc_compatible n p.
-Hint Resolve malloc_token_local_facts : saturate_local.
-Parameter malloc_token_precise:
-  forall sh n p, predicates_sl.precise (malloc_token sh n p).
 
-Definition malloc_spec' :=
-   WITH n:Z
-   PRE [ 1%positive OF tuint ]
-       PROP (0 <= n <= Int.max_unsigned)
-       LOCAL (temp 1%positive (Vint (Int.repr n)))
+Parameter malloc_token_local_facts:
+  forall {cs: compspecs} sh t p, malloc_token sh t p |-- !! malloc_compatible (sizeof t) p.
+Hint Resolve malloc_token_local_facts : saturate_local.
+Parameter malloc_token_change_composite: forall {cs_from cs_to} {CCE : change_composite_env cs_from cs_to} sh t,
+  cs_preserve_type cs_from cs_to (coeq cs_from cs_to) t = true ->
+  @malloc_token cs_from sh t = @malloc_token cs_to sh t.
+Ltac change_compspecs' cs cs' ::=
+  match goal with
+  | |- context [@data_at cs' ?sh ?t ?v1] => erewrite (@data_at_change_composite cs' cs _ sh t); [| apply JMeq_refl | reflexivity]
+  | |- context [@field_at cs' ?sh ?t ?gfs ?v1] => erewrite (@field_at_change_composite cs' cs _ sh t gfs); [| apply JMeq_refl | reflexivity]
+  | |- context [@data_at_ cs' ?sh ?t] => erewrite (@data_at__change_composite cs' cs _ sh t); [| reflexivity]
+  | |- context [@field_at_ cs' ?sh ?t ?gfs] => erewrite (@field_at__change_composite cs' cs _ sh t gfs); [| reflexivity]
+  | |- context [@malloc_token cs' ?sh ?t] => erewrite (@malloc_token_change_composite cs' cs _ sh t); [| reflexivity]
+  | |- context [?A cs'] => change (A cs') with (A cs)
+  | |- context [?A cs' ?B] => change (A cs' B) with (A cs B)
+  | |- context [?A cs' ?B ?C] => change (A cs' B C) with (A cs B C)
+  | |- context [?A cs' ?B ?C ?D] => change (A cs' B C D) with (A cs B C D)
+  | |- context [?A cs' ?B ?C ?D ?E] => change (A cs' B C D E) with (A cs B C D E)
+  | |- context [?A cs' ?B ?C ?D ?E ?F] => change (A cs' B C D E F) with (A cs B C D E F)
+ end.
+(*
+Parameter malloc_token_precise:
+  forall {cs: compspecs} sh t p, predicates_sl.precise (malloc_token sh t p).
+*)
+Definition malloc_spec'  {cs: compspecs} :=
+   WITH t:type
+   PRE [ 1%positive OF size_t ]
+       PROP (0 <= sizeof t <= Ptrofs.max_unsigned;
+                complete_legal_cosu_type t = true;
+                natural_aligned natural_alignment t = true)
+       LOCAL (temp 1%positive (Vptrofs (Ptrofs.repr (sizeof t))))
        SEP ()
     POST [ tptr tvoid ] EX p:_,
        PROP ()
        LOCAL (temp ret_temp p)
        SEP (if eq_dec p nullval then emp
-            else (malloc_token Tsh n p * memory_block Tsh n p)).
-
-Definition malloc_spec (prog: program) :=
-   try_spec prog "_malloc" malloc_spec'.
-Arguments malloc_spec prog / .
+            else (malloc_token Tsh t p * data_at_ Ews t p)).
 
 Parameter body_malloc:
- forall {Espec: OracleKind},
+ forall {Espec: OracleKind} {cs: compspecs} ,
   body_lemma_of_funspec EF_malloc malloc_spec'.
 
-Definition free_spec' :=
-   WITH p:_, n:_
+Definition free_spec'  {cs: compspecs} :=
+   WITH t: type, p:val
    PRE [ 1%positive OF tptr tvoid ]
        PROP ()
        LOCAL (temp 1%positive p)
-       SEP (malloc_token Tsh n p; memory_block Tsh n p)
+       SEP (malloc_token Tsh t p; data_at_ Ews t p)
     POST [ Tvoid ]
        PROP ()
        LOCAL ()
        SEP ().
 
-Definition free_spec  (prog: program) :=
-   try_spec prog "_free" free_spec'.
-Arguments free_spec prog / .
-
 Parameter body_free:
- forall {Espec: OracleKind},
+ forall {Espec: OracleKind} {cs: compspecs} ,
   body_lemma_of_funspec EF_free free_spec'.
 
-Definition library_G prog :=
-  exit_spec prog ++ malloc_spec prog ++ free_spec prog.
+Definition library_G  {cs: compspecs} prog :=
+ let defs := prog_defs prog in 
+  try_spec "exit" exit_spec' defs ++
+  try_spec "_malloc" malloc_spec' defs ++
+  try_spec "_free" free_spec' defs.
 
-Ltac with_library prog G := 
- let x := constr:(library_G prog) in
- let x := eval hnf in x in 
- let x := eval simpl in x in
- let y := constr:(x++G) in
- let y := eval cbv beta iota delta [app] in y in 
- with_library' prog y.
+Ltac with_library prog G :=
+  let pr := eval unfold prog in prog in  
+ let x := constr:(library_G pr ++ G) in
+  let x := eval cbv beta delta [app library_G] in x in
+  let x := simpl_prog_defs x in 
+  let x := eval cbv beta iota zeta delta [try_spec] in x in 
+  let x := eval simpl in x in 
+    with_library' pr x.
 
 Lemma semax_func_cons_malloc_aux:
-  forall (gx : genviron) (x : Z) (ret : option val),
+  forall {cs: compspecs} (gx : genviron) (t :type) (ret : option val),
 (EX p : val,
  PROP ( )
  LOCAL (temp ret_temp p)
  SEP (if eq_dec p nullval
       then emp
-      else malloc_token Tsh x p * memory_block Tsh x p))%assert
+      else malloc_token Tsh t p * data_at_ Ews t p))%assert
   (make_ext_rval gx ret) |-- !! is_pointer_or_null (force_val ret).
 Proof.
  intros.
  rewrite exp_unfold. Intros p.
  rewrite <- insert_local.
  rewrite lower_andp.
- apply derives_extract_prop; intro. hnf in H. rewrite retval_ext_rval in H.
+ apply derives_extract_prop; intro.
+ destruct H; unfold_lift in H. rewrite retval_ext_rval in H.
  subst p.
  if_tac. rewrite H; entailer!.
  renormalize. entailer!.

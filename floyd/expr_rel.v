@@ -1,18 +1,18 @@
-Require Import floyd.base2.
-Require Import floyd.client_lemmas.
-Require Import floyd.closed_lemmas.
-Require Import floyd.forward_lemmas floyd.call_lemmas.
-Require Import floyd.nested_field_lemmas.
-Require Import floyd.data_at_rec_lemmas.
-Require Import floyd.field_at.
-Require Import floyd.entailer.
-Require Import floyd.globals_lemmas.
-Require Import floyd.reptype_lemmas.
-Require Import floyd.semax_tactics.
-Require Import floyd.efield_lemmas.
-Require Import floyd.proj_reptype_lemmas.
-Require Import floyd.field_at.
-Require Import floyd.replace_refill_reptype_lemmas.
+Require Import VST.floyd.base2.
+Require Import VST.floyd.client_lemmas.
+Require Import VST.floyd.closed_lemmas.
+Require Import VST.floyd.forward_lemmas VST.floyd.call_lemmas.
+Require Import VST.floyd.nested_field_lemmas.
+Require Import VST.floyd.data_at_rec_lemmas.
+Require Import VST.floyd.field_at.
+Require Import VST.floyd.entailer.
+Require Import VST.floyd.globals_lemmas.
+Require Import VST.floyd.reptype_lemmas.
+Require Import VST.floyd.semax_tactics.
+Require Import VST.floyd.efield_lemmas.
+Require Import VST.floyd.proj_reptype_lemmas.
+Require Import VST.floyd.field_at.
+Require Import VST.floyd.replace_refill_reptype_lemmas.
 Local Open Scope logic.
 
 Lemma rel_lvalue_var {cs: compspecs}:
@@ -90,7 +90,7 @@ Lemma rel_expr_nested_load {cs: compspecs}:
   type_is_by_value (nested_field_type2 t_root gfs) = true ->
   P |-- rel_LR e lr p rho && efield_denote efs gfs rho && (data_at sh t_root v p * TT) ->
   P |-- rel_expr (nested_efield e efs tts) (repinject _ (proj_reptype t_root gfs v)) rho.
-Admitted.
+Abort. (* not needed *)
 
 Lemma sc_semax_load_store:  forall {Espec: OracleKind} {CS: compspecs},
  forall p (Delta: tycontext) t_root e lr efs tts gfs e2 sh v0 v2 P P',

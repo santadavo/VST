@@ -1,14 +1,39 @@
+Require Export VST.msl.msl_standard.
+Require Import VST.veric.base.
+Require Import compcert.cfrontend.Ctypes.
+Require Import VST.veric.shares.
+Require Import VST.veric.rmaps.
+Require Import VST.veric.rmaps_lemmas.
+Require Export VST.veric.Memory. (*for address, and eq_dec memval*)
 
-Require Export msl.msl_standard.
-Require Import veric.base.
-Require Import veric.shares.
-Require Import veric.rmaps.
-Require Import veric.rmaps_lemmas.
+Instance EqDec_type: EqDec type := type_eq.
 
+Definition funsig := (list (ident*type) * type)%type. (* argument and result signature *)
+(*moved to mpred
+Definition strict_bool_val (v: val) (t: type) : option bool :=
+   match v, t with
+   | Vint n, Tint _ _ _ => Some (negb (Int.eq n Int.zero))
+   | Vlong n, Tlong _ _ => Some (negb (Int64.eq n Int64.zero))
+   | (Vint n), (Tpointer _ _ | Tarray _ _ _ | Tfunction _ _ _ ) =>
+             if Int.eq n Int.zero then Some false else None
+   | Vlong n, (Tpointer _ _ | Tarray _ _ _ | Tfunction _ _ _ ) =>
+            if Archi.ptr64 then if Int64.eq n Int64.zero then Some false else None else None
+   | Vptr b ofs, (Tpointer _ _ | Tarray _ _ _ | Tfunction _ _ _ ) => Some true
+   | Vfloat f, Tfloat F64 _ => Some (negb(Float.cmp Ceq f Float.zero))
+   | Vsingle f, Tfloat F32 _ => Some (negb(Float32.cmp Ceq f Float32.zero))
+   | _, _ => None
+   end.
+*)
+Inductive kind : Type := VAL : memval -> kind
+                                   | LK : forall n i : Z, kind
+                                   | FUN: funsig -> calling_convention -> kind.
+
+(*Non-Ctypes.v- using variant:
 Inductive kind : Type := VAL : memval -> kind
                                    | LK : Z -> kind
                                    | CT: Z -> kind
-                                   | FUN: funsig -> calling_convention -> kind.
+                                   | FUN: (*funsig -> calling_convention*)signature -> kind.
+ *)
 
 Definition isVAL (k: kind) := match k with | VAL _ => True | _ => False end.
 Definition isFUN (k: kind) := match k with | FUN _ _ => True | _ => False end.
@@ -28,80 +53,6 @@ Definition address := address.
 Definition some_address : address := (xH,0).
 Definition kind := kind.
 
-Definition valid (f: address -> option (rshare*kind)) := 
-  forall b ofs, 
-     match f (b,ofs) with
-     | Some (sh, LK n) => forall i, 0 < i < n -> f(b,ofs+i) = Some (sh, CT i)
-     | Some (sh, CT i) => exists n, 0 < i < n /\ f(b,ofs-i) = Some (sh,LK n)
-     | _ => True
-    end.
-
-Lemma valid_empty: valid (fun _ => None).
-Proof.
-unfold valid; intros.
-auto.
-Qed.
-
-Lemma valid_join: forall f g h : address -> option (rshare * kind),
-   @join _ (Join_fun address (option (rshare * kind))
-                   (Join_lower (Join_prod rshare Join_rshare kind (Join_equiv kind))))
-      f g h  ->
- valid f -> valid g -> valid h.
-Proof.
- unfold valid; intros f g h J H H0 b ofs.
-case_eq (h(b,ofs)); auto; intros [sh k] ?.
-destruct k; auto; intros.
-(**  LK -> CT **)
- generalize (H b ofs); intro H'; generalize (H0 b ofs); intro H0'.
- generalize (J (b,ofs)); rewrite H1; intro H8.
- inv H8. clear H'.  rewrite H6 in H0'. specialize (H0' _ H2).
- specialize (J (b,ofs+i)); rewrite H0' in J.
- inv J; auto.
- specialize (H b (ofs+i)). rewrite <- H3 in H. destruct a1. inv H8. simpl in *.
- inv H9. destruct H as [n [? ?]]. replace (ofs+i-i) with ofs in H8 by omega.
- rewrite <- H4 in H8; inv H8.
- clear H0'. rewrite H6 in H'. specialize (H' _ H2).
- specialize (J (b,ofs+i)); rewrite H' in J.
- inv J; auto.
- specialize (H0 b (ofs+i)). rewrite <- H4 in H0. destruct a2. inv H8. simpl in *.
- inv H9. destruct H0 as [n [? ?]]. replace (ofs+i-i) with ofs in H8 by omega.
- rewrite <- H5 in H8; inv H8.
- rewrite <- H3 in H'. rewrite <- H4 in H0'. destruct a1; destruct a2.
- destruct H6. simpl in *. destruct H6; subst k k0.
- specialize (H b (ofs+i)); specialize (H0 b (ofs+i)).
- rewrite (H0' _ H2) in H0.  rewrite (H' _ H2) in H.
- destruct H as [n [? ?]]; destruct H0 as [n' [? ?]].
- replace (ofs+i-i) with ofs in H6,H7 by omega.
- rewrite <- H4 in H7; inv H7. rewrite <- H3 in H6; inv H6.
- specialize (J (b,ofs+i)). rewrite (H' _ H2) in J. rewrite (H0' _ H2) in J.
- inv J; auto. inv H9; auto. simpl in *. destruct a3; simpl in *. inv H7.
- f_equal. f_equal. eapply join_eq; eauto.
-(** CT -> LK **)
- generalize (H b ofs); intros H'; generalize (H0 b ofs); intro H0'.
- generalize (J (b,ofs)); intro H8; inv H8.
- rewrite H1 in H5. rewrite H5 in H0'. destruct H0' as [n [? ?]]; exists n; split; auto.
- specialize (J (b,ofs-z)); rewrite H4 in J.
- inv J; auto. destruct a1; destruct a3. destruct H9. simpl in *. inv H9.
- specialize (H b (ofs-z)). rewrite <- H6 in H.
- specialize (H _ H2).
- replace (ofs-z+z) with ofs in H by omega. congruence.
- rewrite H1 in H5. rewrite H5 in H'. destruct H' as [n [? ?]]; exists n; split; auto.
- specialize (J (b,ofs-z)); rewrite H3 in J.
- inv J; auto. destruct a2; destruct a3. destruct H9. simpl in *. inv H9.
- specialize (H0 b (ofs-z)). rewrite <- H7 in H0.
- specialize (H0 _ H2).
- replace (ofs-z+z) with ofs in H0 by omega. congruence.
- destruct a1; destruct a2; destruct a3.
- rewrite <- H3 in H0'; rewrite <- H2 in H'. destruct H5. destruct H6. simpl in *; subst.
- rewrite H1 in H4. inv H4.
- destruct H' as [n [? ?]]. exists n; split; auto.
- specialize (J (b,ofs-z)). rewrite H6 in J.
- assert (g (b,ofs-z) = Some (r0, LK n)).
- destruct H0' as [n' [? ?]]. rewrite H8 in J. inv J. destruct H12. inv H10; simpl in *. inv H12; auto.
- rewrite H7 in J. inv J. inv H11. simpl in *. destruct a3; simpl in *. inv H9.
- repeat f_equal. eapply join_eq; auto.
-Qed.
-
 End CompCert_AV.
 
 Lemma getVAL: forall k, {v : memval & k = VAL v}  + {~isVAL k}.
@@ -119,105 +70,6 @@ intros.
 inv H; auto.
 Qed.
 
-Lemma VAL_valid:
- forall (f: address -> option (rshare*kind)),
-   (forall l sh k, f l = Some (sh,k) -> isVAL k) ->
-   CompCert_AV.valid f.
-Proof.
-intros.
-intros b ofs.
-case_eq (f (b,ofs)); intros; auto.
-destruct p.
-specialize (H _ _ _ H0).
-destruct k; try solve [auto | inversion H].
-Qed.
-
-Lemma VAL_or_FUN_valid:
- forall (f: address -> option (rshare*kind)),
-   (forall l sh k, f l = Some (sh,k) -> isVAL k \/ isFUN k) ->
-   CompCert_AV.valid f.
-Proof.
-intros.
-intros b ofs.
-case_eq (f (b,ofs)); intros; auto.
-destruct p.
-specialize (H _ _ _ H0).
-destruct k; try solve [auto | simpl in H; tauto].
-Qed.
-
-Lemma blockwise_valid:
-  forall f,
-    (forall b, exists g, CompCert_AV.valid g /\ forall ofs, f (b,ofs) = g (b,ofs)) ->
-     CompCert_AV.valid f.
-Proof.
-intros.
-intros b ofs.
-destruct (H b); clear H.
-destruct H0.
-rewrite H0.
-generalize (H b ofs); case_eq (x (b,ofs)); intros; auto.
-destruct p; auto.
-destruct k; auto.
-intros.
-rewrite H0; auto.
-destruct H2 as [n [? ?]]; exists n; split; auto.
-rewrite H0; auto.
-Qed.
-
-Lemma store_valid:
-  forall (f f' :  address -> option (rshare*kind)),
-   CompCert_AV.valid f ->
-     (forall l, f l = f' l \/
-                  match f l, f' l with
-                  | Some (_, k) , Some (_, k') =>    isVAL k /\ isVAL k'
-                  | Some(_, k), None => isVAL k
-                  | None, Some(_, k') => isVAL k'
-                  | None, None => True
-                  end) ->
-   CompCert_AV.valid f'.
-Proof.
-intros.
-intros b ofs.
-generalize (H b ofs) (H0 (b,ofs)).
-case_eq (f' (b,ofs)); simpl in *; intros; auto.
-destruct p.
-destruct k; simpl; auto.
-intros.
-destruct H3.
-rewrite H3 in H2.
-specialize (H2 _ H4).
-spec H0 (b,ofs+i).
-destruct H0.
-congruence.
-rewrite H2 in H0.
-destruct (f' (b,ofs+i)).
-destruct p.
-destruct H0.
-destruct H0; inv H0.
-destruct H0; inv H0.
-destruct (f(b,ofs)).
-destruct p.
-destruct H3.
-inv H5.
-inv H3.
-destruct H3.
-rewrite H3 in H2.
-destruct H2 as [n [? ?]]; exists n; split; auto.
-specialize (H0 (b,ofs-z)).
-destruct H0; try congruence.
-rewrite H4 in H0.
-destruct (f' (b,ofs-z)); auto.
-destruct p.
-destruct H0.
-destruct H0; inv H0.
-destruct H0; inv H0.
-destruct (f(b,ofs)).
-destruct p.
-destruct H3.
-inv H4.
-inv H3.
-Qed.
-
 Instance EqDec_calling_convention: EqDec calling_convention.
 Proof.
   hnf. decide equality.
@@ -228,7 +80,7 @@ Qed.
 
 Instance EqDec_kind: EqDec kind.
 Proof.
-  hnf. decide equality; try apply eq_dec; try apply zeq.
+  hnf. decide equality; try apply eq_dec; try apply zeq; try apply signature_eq.
 Qed.
 
 Module R := Rmaps (CompCert_AV).
@@ -237,36 +89,13 @@ Module RML := Rmaps_Lemmas(R).
 Export RML.
 Export R.
 
-Lemma rmap_valid_e1: forall r b ofs n i, 0 < i < n ->
-     forall sh, res_option (r @ (b,ofs)) = Some (sh, LK n) -> res_option (r @ (b,ofs+i))= Some (sh, CT i).
-Proof.
-intros until sh.
-generalize (rmap_valid r b ofs); unfold compose.
-case_eq (r @ (b,ofs)); simpl; intros; try discriminate.
-inv H2.
-auto.
-Qed.
-
-Lemma rmap_valid_e2:  forall r b ofs i sh,
-    res_option (r @ (b,ofs+i)) = Some (sh, CT i) ->
-            exists n, 0 < i < n /\ res_option (r @ (b,ofs)) = Some (sh, LK n).
-Proof.
-intros until sh.
-generalize (rmap_valid r b (ofs+i)); unfold compose.
-case_eq (r @ (b,ofs+i)); simpl; intros; try discriminate.
-inv H1.
-destruct H0 as [n [? ?]].
-replace (ofs+i-i) with ofs in H1 by omega.
-eauto.
-Qed.
-
 Definition mk_rshare: forall p: Share.t, pure_readable_share p -> rshare := exist pure_readable_share.
 Definition rshare_sh (p: rshare) : Share.t := proj1_sig p.
 (*
 Definition mk_pshare : forall p: Share.t, nonunit p -> pshare := exist nonunit.
 *)
 
-Lemma mk_rshare_sh: forall p (H: pure_readable_share (rshare_sh p)),
+Lemma mk_rshare_sh: forall (p:rshare) (H: pure_readable_share (rshare_sh p)),
   mk_rshare (rshare_sh p) H = p.
 Proof.
   intros.
@@ -279,11 +108,6 @@ Definition fixup_splitting
   (a:address -> Share.t) (z: address -> option (rshare * kind)) : address -> option (rshare * kind) :=
   fun l => 
     match z l with
-    | Some (sh, CT i) => 
-       match dec_readable (a (fst l, snd l - i)) with
-       | left p => Some (readable_part p,  CT i)
-       | right _ => None
-       end
     | Some (sh, k) =>
        match dec_readable (a l) with
        | left p => Some (readable_part p,  k)
@@ -297,50 +121,11 @@ Definition share_of (x: option (rshare * kind)) : Share.t :=
 
 Definition Join_pk := (Join_lower (Join_prod rshare _ kind (Join_equiv _))).
 
-Lemma fixup_splitting_valid : forall (a: address->Share.t) (z:address -> option (rshare * kind)),
-    (forall x, join_sub (a x) (share_of (z x))) ->
-    AV.valid z ->
-    AV.valid (fixup_splitting a z).
-Proof.
-  unfold AV.valid, res_option, compose; intros.
-  unfold fixup_splitting.
-  spec H0 b ofs.
-  case_eq (z (b,ofs)); intros;
-    rewrite H1 in H0; auto. destruct p.
-  destruct k.
-* simpl. destruct (dec_readable (a (b,ofs))); auto.
-* destruct (dec_readable (a (b,ofs))); auto.
-  intros.
-  specialize (H0 _ H2). rewrite H0. simpl.
-  replace (ofs+i-i) with ofs by omega.
-  destruct (dec_readable (a (b, ofs))); try contradiction.
-  f_equal. f_equal. f_equal. apply proof_irr. 
-*
-  simpl.
-  destruct H0 as [n [? ?]].
-  destruct ( dec_readable (a (b, ofs - z0))); auto.
-  exists n. split; auto.
-  rewrite H2.
-  destruct ( dec_readable (a (b, ofs - z0))); auto with extensionality; contradiction.
-*
-  simpl.
-  destruct (dec_readable (a (b,ofs))); auto.
-Qed.
-
 Lemma share_of_Some: forall p: rshare * AV.kind, readable_share (share_of (Some p)).
 Proof.
  intros. destruct p as [[? ?] ?]; simpl.
  auto.
  destruct p; auto.
-Qed.
-
-Lemma fixup_trace_ok_share_of:
-  forall a (OKa: fixup_trace_ok a) x, 
-       Share.glb Share.Rsh (share_of (a x)) = share_of (a x).
-Proof.
-  intros.
- specialize (OKa x). destruct (a x) as [[? ?]|]; simpl in *.
- auto. apply Share.glb_bot.
 Qed.
 
 Lemma join_sub_same_k:
@@ -384,8 +169,6 @@ Proof.
 Qed.
 
 Lemma fixup_join : forall a (ac ad: address -> Share.t)  z,
-  AV.valid a ->
-  AV.valid z ->
   (forall x, @join_sub _ Join_pk (a x) (z x)) ->
   (forall x, join (ac x) (ad x) (share_of (a x))) ->
   (forall x,
@@ -394,6 +177,7 @@ Lemma fixup_join : forall a (ac ad: address -> Share.t)  z,
     (fixup_splitting ad z x)
     (a x)).
 Proof.
+ do 2  pose proof I.
   intros.
   unfold fixup_splitting.
 
@@ -440,7 +224,7 @@ Ltac glb_Rsh_tac :=
  end;
  auto.
 
-  case_eq (z x); intros; [destruct p;  destruct k| ].
+  case_eq (z x); intros; [destruct p | ].
 *
   specialize (H1 x); specialize (H2 x).
   clear H H0. rewrite H3 in *. clear z H3.
@@ -478,132 +262,6 @@ Ltac glb_Rsh_tac :=
   glb_Rsh_tac.
   glb_Rsh_tac.
 *
-  specialize (H1 x); specialize (H2 x).
-  clear H H0. rewrite H3 in *. clear z H3.
-  destruct (dec_readable (ac x)).
- +
-  destruct (dec_readable (ad x)).
- -
-  destruct (a x) as [[[? ?] ?] | ]; simpl in *.
-  apply join_glb_Rsh in H2.  
-  glb_Rsh_tac.
-  constructor. do 2 red. simpl; split; auto.
-  glb_Rsh_tac.
-  -
-  apply join_glb_Rsh in H2.  
-  glb_Rsh_tac.
-  destruct (a x) as [[[? ?] ?]|]; simpl in *.
-  glb_Rsh_tac.
-  glb_Rsh_tac.
- +
-  glb_Rsh_tac.
-  destruct (a x) as [[[? ?] ?]|]; simpl in *.
- -
-  glb_Rsh_tac.
-  apply join_glb_Rsh in H2.
-  glb_Rsh_tac.
-  destruct (dec_readable (ad x)).
-  glb_Rsh_tac.
-  glb_Rsh_tac.
-  destruct p. apply n0.
-  unfold readable_share. rewrite H2. intro.
-  glb_Rsh_tac.
- -
-  glb_Rsh_tac. 
-  destruct (dec_readable Share.bot); glb_Rsh_tac.
-*
- destruct x as [b ofs]. simpl.
- assert (H1' := H1 (b,ofs)).
- assert (H' := H b ofs).
- specialize (H2 (b,ofs-z0)).
- specialize (H b (ofs-z0)).
- specialize (H0 b ofs).
- specialize (H1 (b,ofs-z0)).
- simpl in *. rewrite H3 in *.
- destruct H0 as [s [? ?]]. rewrite H4 in *.
- clear z H3 H4.
- apply join_glb_Rsh in H2.
- destruct (dec_readable (ac (b, ofs - z0))).
- +
- destruct (dec_readable (ad (b,ofs-z0))).
- -
- destruct (a (b,ofs-z0)) as [[? ?]|] eqn:?; simpl in *.
- glb_Rsh_tac.
- specialize (H _ H0). clear H0.
- rewrite Z.sub_add in H. rewrite H in *.
- constructor. constructor; simpl; auto.
- do 2 red. simpl.
- destruct r2; simpl in *.
- glb_Rsh_tac.
- rewrite Share.glb_bot in *.
- glb_Rsh_tac.
- -
- glb_Rsh_tac.
- destruct (a (b,ofs-z0)) as [[? ?]|] eqn:?; simpl in *.
- glb_Rsh_tac.
- specialize (H _ H0).
- rewrite Z.sub_add in H. rewrite H in *.
- glb_Rsh_tac.
- destruct r1; apply exist_ext. rewrite H2.
- simpl.
- glb_Rsh_tac.
- elimtype False;
- glb_Rsh_tac.
- +
- glb_Rsh_tac.
- destruct (a (b,ofs-z0))  as [[? ?]|] eqn:?.
- glb_Rsh_tac.
- specialize (H _ H0). clear H0.
- rewrite Z.sub_add in H. rewrite H in *.
- simpl in H2.
- destruct (dec_readable (ad (b, ofs - z0))).
- glb_Rsh_tac.
- destruct r0; simpl in *; apply exist_ext.
- glb_Rsh_tac.
- glb_Rsh_tac.
- contradiction n0.
- unfold readable_share. rewrite H2.
- clear. destruct r0; simpl. destruct p.
- glb_Rsh_tac.
- simpl in H2. glb_Rsh_tac.
- destruct (dec_readable (ad (b, ofs - z0))).
- contradiction.
- destruct(a (b,ofs)) as  [[[? ?] ?]|]; auto.
- glb_Rsh_tac.
- destruct H' as [s' [? ?]]. rewrite Heqo in H3; inv H3.
-*
-  specialize (H1 x); specialize (H2 x).
-  clear H H0. rewrite H3 in *. clear z H3.
-  apply join_glb_Rsh in H2.
-  destruct (dec_readable (ac x)).
- +
-  destruct (dec_readable (ad x)).
- -
-  destruct (a x) as [[[? ?] ?] | ]; simpl in *.
- glb_Rsh_tac.
- constructor. constructor; simpl. glb_Rsh_tac. constructor; auto.
- glb_Rsh_tac.
-  -
- glb_Rsh_tac.
-  destruct (a x) as [[[? ?] ?]|]; simpl in *.
- glb_Rsh_tac.
- glb_Rsh_tac.
- +
- glb_Rsh_tac.
-  destruct (a x) as [[[? ?] ?]|]; simpl in *.
- -
-  glb_Rsh_tac.
-  destruct (dec_readable (ad x)).
-  glb_Rsh_tac.
-  glb_Rsh_tac.
-  apply n0. unfold readable_share. rewrite H2. intro.
-  destruct p. glb_Rsh_tac.
- - 
-  glb_Rsh_tac.
-  destruct (dec_readable (ad x)).
-  glb_Rsh_tac.
-  glb_Rsh_tac.
-*
  specialize (H1 x). rewrite H3 in H1.
  destruct H1.
  inv H1. constructor. rewrite H7; constructor.
@@ -618,10 +276,10 @@ Proof.
   destruct H0. simpl in *. do 3 red in H. simpl in H. auto.
 Qed.
 
-Instance Cross_rmap_aux: Cross_alg (sig AV.valid).
+Instance Cross_rmap_aux: Cross_alg (AV.address -> option (rshare * AV.kind)).
 Proof.
- hnf. intros [a Ha] [b Hb] [c Hc] [d Hd] [z Hz] ? ?.
- hnf in H,H0. simpl in H,H0.
+ hnf. intros a b c d z ? ?.
+(* hnf in H,H0. simpl in H,H0. *)
  destruct (cross_split_fun Share.t _ address share_cross_split
                    (share_of oo a) (share_of oo b) (share_of oo c) (share_of oo d) (share_of oo z))
   as [[[[ac ad] bc] bd] [? [? [? ?]]]].
@@ -631,22 +289,10 @@ Proof.
  intro x. specialize (H0 x). unfold compose.
  clear - H0. inv H0; simpl in *. apply join_unit1; auto. apply join_unit2; auto.
  destruct a1; destruct a2; destruct a3; apply H3.
- assert (Sac: forall x : address, join_sub (ac x) (share_of (z x))).
-   intro x.  apply join_sub_trans with (share_of (a x)). eexists; apply (H1 x).
-   exists (share_of (b x)).  apply join_share_of; auto.
- assert (Sad: forall x : address, join_sub (ad x) (share_of (z x))).
-   intro x.  apply join_sub_trans with (share_of (a x)). eexists; eapply join_comm; apply (H1 x).
-   exists (share_of (b x)).  apply join_share_of; auto.
- assert (Sbc: forall x : address, join_sub (bc x) (share_of (z x))).
-   intro x.  apply join_sub_trans with (share_of (b x)). eexists; apply (H2 x).
-   exists (share_of (a x)).  eapply join_comm; apply join_share_of; auto.
- assert (Sbd: forall x : address, join_sub (bd x) (share_of (z x))).
-   intro x.  apply join_sub_trans with (share_of (b x)). eexists; eapply join_comm; apply (H2 x).
-   exists (share_of (a x)).  eapply join_comm; apply join_share_of; auto.
- exists (exist AV.valid _ (fixup_splitting_valid ac z Sac Hz),
-            exist AV.valid _ (fixup_splitting_valid ad z Sad Hz),
-            exist AV.valid _ (fixup_splitting_valid bc z Sbc Hz),
-            exist AV.valid _ (fixup_splitting_valid bd z Sbd Hz)).
+ exists (fixup_splitting ac z, 
+            fixup_splitting ad z, 
+            fixup_splitting bc z, 
+            fixup_splitting bd z).
  split3; [ | | split];  do 2 red; simpl; intro;
  apply fixup_join; auto; intros.
  exists (b x0); apply H.
@@ -655,7 +301,7 @@ Proof.
  exists (c x0); apply join_comm; apply H0.
 Qed.
 
-Instance Trip_resource : Trip_alg resource.
+Instance Trip_resource: Trip_alg resource.
 Proof.
 intro; intros.
 destruct a as [ra | ra sa ka pa | ka pa].
@@ -717,7 +363,7 @@ destruct (triple_join_exists_share ra rb rc rab rbc rac) as [rabc ?];
   [inv H | inv H0 | inv H1 | ] ; auto.
 assert (sabc := join_readable1 j sab).
 exists (YES rabc sabc kc pc).
- inv H. inv H1. inv H0.  
+ inv H. inv H1. inv H0.
 constructor; auto.
  exists ab. inv H. inv H1. inv H0. constructor.
 Qed.
@@ -731,6 +377,7 @@ do 3 red in H|-*. contradict H.
 rewrite glb_twice in H. auto.
 Qed.
 
+(* Do we need this?
 Instance Trip_rmap : Trip_alg rmap.
 Proof.
 intro; intros.
@@ -746,7 +393,8 @@ destruct x; simpl; auto.
 destruct k; simpl; auto.
 intros.
 destruct (f (b',z'+i)). simpl.
-case_eq (ab @ (b', z')); case_eq (c @ (b', z')); intros.
+case_eq (ab @ (b', z')); case_eq (c @ (b', z')); intros; try solve [rewrite H3 in j; inv j];
+  try solve [rewrite H4 in j; inv j].
 rewrite H3 in j; rewrite H4 in j. inv j.
 rename H3 into H6.
 pose proof (rmap_valid_e1 c b' z' _ _ H2 (readable_part r0)).
@@ -777,8 +425,6 @@ rewrite H4 in H5. inv H5.
 *
 intros.
 rewrite H3 in j0. inv j0.
-*
-rewrite H4 in j. inv j. rewrite H3 in H7. inv H7.
 *
 rewrite H4 in j. inv j.
 assert (H99 := pure_readable_share_i _ r0).
@@ -813,20 +459,10 @@ apply join_glb_Rsh in RJ.
 apply join_glb_Rsh in RJ0.
 rewrite H8 in *; rewrite H7 in *.
 eapply join_eq;  eauto.
-*
-rewrite H3 in j; inv j.
-*
-rewrite H4 in j; inv j.
-*
-rewrite H4 in j; inv j.
-*
-rewrite H3 in j; inv j.
 * (**)
 destruct (f (b',z'-z)).
 simpl.
-case_eq (ab @ (b', z')); case_eq (c @ (b', z')); intros.
-+
-rewrite H2 in j; rewrite H3 in j; inv j.
+case_eq (ab @ (b', z')); case_eq (c @ (b', z')); intros; try solve [rewrite H2, H3 in j; inv j].
 +
 rewrite H2 in j; rewrite H3 in j; inv j.
 rename H2 into H5.
@@ -846,8 +482,6 @@ pose proof (rmap_valid_e1 ab b' (z'-z) _ _ H2 (mk_rshare _ H98)).
 spec H4. rewrite <- H6. simpl. repeat f_equal. apply exist_ext. auto.
 rewrite Z.sub_add in H4.
 rewrite <- H3 in H4; inv H4.
-+
-rewrite H2 in j; inv j.
 +
 rewrite H2 in j; inv j. rewrite H3 in H5; inv H5.
 assert (H99 := pure_readable_share_i _ r0).
@@ -885,16 +519,8 @@ apply join_glb_Rsh in RJ.
 apply join_glb_Rsh in RJ0.
 rewrite H9 in *; rewrite H7 in *.
 eapply join_eq; eauto.
-+
-rewrite H2 in j; inv j.
-+
-rewrite H3 in j; inv j.
-+
-rewrite H3 in j; inv j.
-+
-rewrite H2 in j; inv j.
 *
-destruct (make_rmap _ H2 (level a)) as [abc [? ?]].
+destruct (make_rmap _ _ H2 (level a)) as [abc [? ?]].
 extensionality loc. unfold compose; simpl.
 destruct (f loc); simpl.
 destruct x; simpl; auto.
@@ -934,7 +560,7 @@ rewrite H4.
 destruct (f loc).
 simpl.
 auto.
-Qed.
+Qed.*)
 
 Obligation Tactic := Tactics.program_simpl.
 
@@ -1126,7 +752,7 @@ apply b0.
 omega.
 right.
 contradict n0.
-spec n0 0.
+specialize ( n0 0).
 unfold adr_add in n0; simpl in n0.
 replace (z+0) with z in n0.
 apply n0.
@@ -1171,7 +797,7 @@ apply b0.
 omega.
 right.
 contradict n0.
-spec n0 0.
+specialize ( n0 0).
 unfold adr_add in n0; simpl in n0.
 replace (z+0) with z in n0.
 apply n0.
@@ -1199,6 +825,7 @@ Lemma rmap_age_i:
  forall w w' : rmap,
     level w = S (level w') ->
    (forall l, resource_fmap (approx (level w')) (approx (level w')) (w @ l) = w' @ l) ->
+    ghost_fmap (approx (level w')) (approx (level w')) (ghost_of w) = ghost_of w' ->
     age w w'.
 Proof.
 intros.
@@ -1206,12 +833,14 @@ hnf.
 destruct (levelS_age1 _ _ H).
 assert (x=w'); [ | subst; auto].
 assert (level x = level w')
-  by (apply age_level in H1; omega).
+  by (apply age_level in H2; omega).
 apply rmap_ext; auto.
 intros.
 specialize (H0 l).
-rewrite (age1_resource_at w x H1 l (w@l)).
-rewrite H2.
+rewrite (age1_resource_at w x H2 l (w@l)).
+rewrite H3.
 apply H0.
 symmetry; apply resource_at_approx.
+erewrite age1_ghost_of; eauto.
+rewrite H3; apply H1.
 Qed.

@@ -1,27 +1,35 @@
-Require Import floyd.base2.
-Require Import floyd.client_lemmas.
-Require Import floyd.go_lower.
-Require Import floyd.reptype_lemmas.
-Require Import floyd.data_at_rec_lemmas.
-Require Import floyd.field_at floyd.nested_field_lemmas.
-Require Import floyd.sublist.
+Require Import VST.floyd.base2.
+Require Import VST.floyd.functional_base.
+Require Import VST.floyd.client_lemmas.
+Require Import VST.floyd.go_lower.
+Require Import VST.floyd.reptype_lemmas.
+Require Import VST.floyd.data_at_rec_lemmas.
+Require Import VST.floyd.field_at VST.floyd.nested_field_lemmas.
 
 Local Open Scope logic.
 
+Lemma ptrofs_of_ints_unfold: 
+  forall x, Ptrofs.of_ints x = Ptrofs.repr (Int.signed x).
+Proof. reflexivity. Qed.
+Hint Rewrite ptrofs_of_ints_unfold : norm.
+
+Lemma ptrofs_of_intu_unfold: 
+  forall x, Ptrofs.of_intu x = Ptrofs.repr (Int.unsigned x).
+Proof. reflexivity. Qed.
+Hint Rewrite ptrofs_of_intu_unfold : norm.
+
 Lemma isptr_force_val_sem_cast_neutral :
-  forall p, isptr p -> isptr (force_val (sem_cast_neutral p)).
+  forall p, isptr p -> isptr (force_val (sem_cast_pointer p)).
 Proof.
 intros. destruct p; try contradiction; apply I.
 Qed.
 Hint Resolve isptr_force_val_sem_cast_neutral : norm.
 
-Hint Rewrite (Znth_map Int.zero) (Znth_map Vundef)
-    using (auto; rewrite ?Zlength_map in *; omega) : sublist.
-
 Lemma FF_local_facts: forall {A}{NA: NatDed A}, (FF:A) |-- !!False.
 Proof. intros. apply FF_left. Qed.
 Hint Resolve @FF_local_facts: saturate_local.
 
+(*
 (*** Omega stuff ***)
 
 Ltac omegable' A :=
@@ -136,17 +144,16 @@ Ltac Omega'' L :=
 
 Tactic Notation "Omega" tactic(L) := (omegable; Omega'' L).
 
-Ltac helper1 :=
+Ltac helper1 := 
+  pose_standard_const_equations;
  match goal with
    | |- context [Zlength ?A] => add_nonredundant (Zlength_correct A)
-   | |- context [Int.max_unsigned] => add_nonredundant int_max_unsigned_eq
-   | |- context [Int.max_signed] => add_nonredundant int_max_signed_eq
-   | |- context [Int.min_signed] => add_nonredundant int_min_signed_eq
-  end.
+ end.
 
 Ltac Omega0 := Omega (solve [ helper1 ]).
 
 (*** End of Omega stuff *)
+*)
 
 Ltac simpl_compare :=
  match goal with
@@ -154,16 +161,16 @@ Ltac simpl_compare :=
          revert H; simpl_compare; intro H;
          try (simpl in H; apply Vint_inj in H;
                match type of H with ?a = ?b =>
-                  first [subst a | subst b | idtac]
+                  first [safe_subst a | safe_subst b | idtac]
                end)
  | H: typed_true _ _ |- _ =>
          simpl in H; revert H; simpl_compare; intro H;
          first [apply typed_true_ptr in H
                  | apply typed_true_of_bool in H;
                    first [apply (int_cmp_repr Clt) in H;
-                            [ | repable_signed ..]; simpl in H
+                            [ | rep_omega ..]; simpl in H
                           | apply (int_cmp_repr Ceq) in H;
-                             [ | repable_signed ..]; simpl in H
+                             [ | rep_omega ..]; simpl in H
                           | idtac ]
                  | discriminate H
                  | idtac ]
@@ -172,28 +179,28 @@ Ltac simpl_compare :=
          first [ apply typed_false_ptr in H
                 | apply typed_false_of_bool in H;
                    first [apply (int_cmp_repr' Clt) in H;
-                            [ | repable_signed ..]; simpl in H
+                            [ | rep_omega ..]; simpl in H
                           | apply (int_cmp_repr' Ceq) in H;
-                            [ | repable_signed ..]; simpl in H
+                            [ | rep_omega ..]; simpl in H
                           | idtac]
                  | discriminate H
                  | idtac ]
  | H : Int.lt _ _ = false |- _ =>
          revert H; simpl_compare; intro H;
          try (apply (int_cmp_repr' Clt) in H ;
-                    [ | repable_signed ..]; simpl in H)
+                    [ | rep_omega ..]; simpl in H)
  | H : Int.lt _ _ = true |- _ =>
          revert H; simpl_compare;  intro H;
          try (apply (int_cmp_repr Clt) in H ;
-                    [ | repable_signed ..]; simpl in H)
+                    [ | rep_omega ..]; simpl in H)
  | H : Int.eq _ _ = false |- _ =>
          revert H; simpl_compare;  intro H;
          try (apply (int_cmp_repr' Ceq) in H ;
-                    [ | repable_signed ..]; simpl in H)
+                    [ | rep_omega ..]; simpl in H)
  | H : Int.eq _ _ = true |- _ =>
          revert H; simpl_compare;  intro H;
          try (apply (int_cmp_repr Ceq) in H ;
-                    [ | repable_signed ..]; simpl in H)
+                    [ | rep_omega ..]; simpl in H)
  | |- _ => idtac
 end.
 
@@ -212,7 +219,7 @@ Arguments denote_tc_Zle z !v .
 Arguments denote_tc_samebase !v1 !v2 .
 Arguments denote_tc_nodivover !v1 !v2 .
 Arguments denote_tc_initialized id ty rho / .
-
+Arguments denote_tc_nosignedover op v1 v2 / .
 Ltac simpl_denote_tc :=
  simpl denote_tc_isptr;
  simpl denote_tc_iszero;
@@ -222,7 +229,8 @@ Ltac simpl_denote_tc :=
  simpl denote_tc_Zle;
  simpl denote_tc_samebase;
  simpl denote_tc_nodivover;
- simpl denote_tc_initialized.
+ simpl denote_tc_initialized;
+ simpl denote_tc_nosignedover.
 
 Lemma valid_pointer_weak:
  forall a, valid_pointer a |-- weak_valid_pointer a.
@@ -255,15 +263,16 @@ change predicates_hered.orp with orp.
  apply andp_derives; try apply derives_refl.
  apply orp_right1. apply derives_refl.
  unfold test_eq_ptrs.
- if_tac; auto.
+ destruct (sameblock _ _); auto.
  apply andp_derives; apply valid_pointer_weak.
 Qed.
 
 Lemma valid_pointer_null:
   forall P, P |-- valid_pointer nullval.
 Proof.
-  intros. simpl valid_pointer.
- change predicates_hered.prop with prop. (* delete me *)
+  intros. unfold nullval, valid_pointer, valid_pointer'. 
+  destruct Archi.ptr64 eqn:Hp; simpl;
+ change predicates_hered.prop with prop; (* delete me *)
  normalize.
 Qed.
 
@@ -275,10 +284,13 @@ intros.
  unfold valid_pointer.
  pose proof (extend_tc.extend_valid_pointer' p 0).
  pose proof (predicates_hered.boxy_e _ _ H).
+ change (_ |-- _) with (predicates_hered.derives (valid_pointer' p 0 * Q) (valid_pointer' p 0)).
+ intros ? (w1 & w2 & Hj & Hp & ?).
+ apply (H0 w1); auto.
+ hnf; eauto.
+Qed.
 
-Admitted.
-
- Lemma sepcon_valid_pointer1:
+Lemma sepcon_valid_pointer1:
      forall (P Q: mpred) p,
         P |-- valid_pointer p ->
         P * Q |-- valid_pointer p.
@@ -316,17 +328,30 @@ intros.
  apply andp_left2; auto.
 Qed.
 
-Lemma valid_pointer_zero:
-  forall P, P |-- valid_pointer (Vint (Int.repr 0)).
+Lemma valid_pointer_zero32:
+  forall P, Archi.ptr64=false -> P |-- valid_pointer (Vint (Int.repr 0)).
 Proof.
  intros.
- apply valid_pointer_null.
+ unfold valid_pointer, valid_pointer'. rewrite H.
+ change predicates_hered.prop with prop; (* delete me *)
+ normalize.
 Qed.
+
+Lemma valid_pointer_zero64:
+  forall P, Archi.ptr64=true -> P |-- valid_pointer (Vlong (Int64.repr 0)).
+Proof.
+ intros.
+ unfold valid_pointer, valid_pointer'. rewrite H.
+ change predicates_hered.prop with prop; (* delete me *)
+ normalize.
+Qed.
+
 
 Hint Resolve sepcon_valid_pointer1 sepcon_valid_pointer2 : valid_pointer.
 Hint Resolve andp_valid_pointer1 andp_valid_pointer2 : valid_pointer.
 Hint Resolve valid_pointer_null : valid_pointer.
-Hint Resolve valid_pointer_zero : valid_pointer.
+Hint Resolve valid_pointer_zero32 : valid_pointer.
+Hint Resolve valid_pointer_zero64 : valid_pointer.
 
 (* TODO: test_order need to be added *)
 Ltac solve_valid_pointer :=
@@ -359,7 +384,22 @@ Ltac pull_out_props :=
                 || simple apply derives_extract_prop');
                 fancy_intros true).
 
+Ltac simplify_float2int :=
+match goal with
+| |- context [Zofsingle (Float32.of_bits (Int.repr ?A))] =>
+   putable A; 
+   let x := fresh "x" in (evar (x: Z));
+   replace (Zofsingle (Float32.of_bits (Int.repr A))) with (Some x) by (subst x; reflexivity);
+   compute in x; subst x
+| |- context [Zoffloat (Float.of_bits (Int.repr ?A))] =>
+   putable A; 
+   let x := fresh "x" in (evar (x: Z));
+   replace (Zoffloat (Float.of_bits (Int.repr A))) with (Some x) by (subst x; reflexivity);
+   compute in x; subst x
+end.
+
 Ltac ent_iter :=
+    repeat simplify_float2int;
     autorewrite with gather_prop;
     repeat (( simple apply derives_extract_prop
                 || simple apply derives_extract_prop');
@@ -368,7 +408,7 @@ Ltac ent_iter :=
    repeat erewrite unfold_reptype_elim in * by (apply JMeq_refl; reflexivity);
    simpl_compare;
    simpl_denote_tc;
-   subst_any;
+   safe_subst_any;
    try autorewrite with entailer_rewrite in *;
    try solve_valid_pointer;
    repeat data_at_conflict_neq.
@@ -402,24 +442,55 @@ Ltac splittable :=
  | |- _ /\ _ => idtac
  end.
 
+Ltac prove_signed_range :=
+  match goal with
+  | |- Int.min_signed <= _ <= Int.max_signed => 
+           normalize; rep_omega
+  | |- Int64.min_signed <= _ <= Int64.max_signed => 
+           normalize; rep_omega
+  end.
+
 Lemma ptr_eq_refl: forall x, isptr x -> ptr_eq x x.
 Proof.
 destruct x; simpl; intros; try contradiction.
-split; auto. apply Int.eq_true.
+split; auto. apply Ptrofs.eq_true.
 Qed.
 Hint Resolve ptr_eq_refl : prove_it_now.
+
+Lemma ptr_eq_nullval: ptr_eq nullval nullval.
+Proof.
+Transparent Archi.ptr64.
+unfold ptr_eq, nullval; simpl.
+split3; auto.
+Opaque Archi.ptr64.
+Qed.
+
+Hint Resolve ptr_eq_nullval : prove_it_now.
 
 Hint Extern 4 (value_fits _ _ _) =>
    (rewrite ?proj_sumbool_is_true by auto;
     rewrite ?proj_sumbool_is_false by auto;
     repeat simplify_value_fits; auto) : prove_it_now.
 
+Lemma intsigned_intrepr_bytesigned: forall i,
+   Int.signed (Int.repr (Byte.signed i)) = Byte.signed i.
+Proof.
+ intros. rewrite Int.signed_repr; auto.
+  destruct (Byte.signed_range i).
+  split.
+  eapply Z.le_trans; [ | eassumption]. compute; intros Hx; inv Hx.
+  eapply Z.le_trans; [eassumption | ]. compute; intros Hx; inv Hx.
+Qed.
+
+Hint Rewrite intsigned_intrepr_bytesigned : rep_omega.
+
 Ltac prove_it_now :=
  first [ splittable; fail 1
         | computable
         | apply Coq.Init.Logic.I
         | reflexivity
-        | Omega0
+        | rewrite ?intsigned_intrepr_bytesigned; rep_omega (* Omega0 *)
+        | prove_signed_range
         | repeat match goal with H: ?A |- _ => has_evar A; clear H end;
           auto with prove_it_now field_compatible;
           autorewrite with norm entailer_rewrite; normalize;
@@ -453,7 +524,7 @@ Lemma try_conjuncts_start: forall A B: Prop,
  Proof. intuition. Qed.
 
 Ltac try_conjuncts_solver :=
-    match goal with H:_ |- ?A =>
+    lazymatch goal with H:_ |- ?A =>
          no_evars A;
          clear H; try immediate; auto; prove_it_now; fail
     end.
@@ -580,24 +651,6 @@ Proof.
 apply prop_right; auto.
 Qed.
 
-Ltac entailer_for_return :=
- go_lower;
- unfold main_post; simpl;
- try simple apply empTrue;
- saturate_local; ent_iter;
- normalize;
- repeat erewrite elim_globals_only by (split3; [eassumption | reflexivity.. ]);
- try match goal with 
- | |- _ |-- ?A =>
-   match A with context [eval_id ?i (globals_only _)] =>
-    fail 3 "Your postcondition refers to local variable " i 
-     "but the only local variable that should appear in a function postcondition is ret_temp"
-   end
- end;
- entailer';
- rewrite <- ?sepcon_assoc;
- try match goal with rho: environ |- _ => clear rho end.
-
 Ltac entbang :=
  intros;
  try match goal with POSTCONDITION := @abbreviate ret_assert _ |- _ =>
@@ -634,7 +687,7 @@ Ltac elim_hyps :=  (* not in use anywhere? *)
  | H: isptr ?x |- _ =>
      let x1 := fresh x "_b" in let x2 := fresh x "_ofs" in
      destruct x as [ | | | | | x1 x2]; inv H
- | H: ptr_eq _ _ |- _ => apply ptr_eq_e in H; subst_any
+ | H: ptr_eq _ _ |- _ => apply ptr_eq_e in H; safe_subst_any
  end.
 
 Ltac aggressive :=
@@ -642,8 +695,10 @@ Ltac aggressive :=
 
 (**** try this out here, for now ****)
 
-Hint Rewrite Int.signed_repr using repable_signed : norm.
-Hint Rewrite Int.unsigned_repr using repable_signed : norm.
+Hint Rewrite Int.signed_repr using rep_omega : norm.
+Hint Rewrite Int.unsigned_repr using rep_omega : norm.
+Hint Rewrite Int64.signed_repr using rep_omega : norm.
+Hint Rewrite Int64.unsigned_repr using rep_omega : norm.
 
 (************** TACTICS FOR GENERATING AND EXECUTING TEST CASES *******)
 
@@ -667,9 +722,6 @@ repeat match goal with
   | H : name _ |- _ => revert H
  end.
 
-Lemma ungather_admit : forall P, P.
-Admitted. (* this is to be used only for test scaffolding. *)
-
 Lemma EVAR_i: forall P: Prop, P -> EVAR P.
 Proof. intros. apply H. Qed.
 
@@ -678,7 +730,7 @@ match goal with
   | |- EVAR (forall x : ?t, _) =>
        let x' := fresh x in evar (x' : t);
        let x'' := fresh x in apply EVAR_i; intro x'';
-       replace x'' with x'; [ungather_entail; clear x'' | apply ungather_admit ]
+       replace x'' with x'; [ungather_entail; clear x'' | admit ]
   | |- _ => intros
  end.
 
@@ -692,7 +744,7 @@ intros.
 subst.
 destruct p; try contradiction.
 simpl. rewrite Z.mul_0_r.
-rewrite Int.add_zero.
+rewrite Ptrofs.add_zero.
 apply prop_ext; intuition.
 Qed.
 Hint Rewrite offset_val_sizeof_hack : norm.
@@ -730,4 +782,98 @@ Lemma Zmax0r: forall n, 0 <= n -> Z.max 0 n = n.
 Proof.
 intros. apply Z.max_r; auto.
 Qed.
-Hint Rewrite Zmax0r using (try computable; Omega0) : norm.
+Hint Rewrite Zmax0r using (try computable; rep_omega (*Omega0*)) : norm.
+
+Import ListNotations.
+
+Definition cstring {CS : compspecs} sh (s: list byte) p := 
+  !!(~In Byte.zero s) &&
+  data_at sh (tarray tschar (Zlength s + 1)) (map Vbyte (s ++ [Byte.zero])) p.
+
+Lemma cstring_local_facts: forall {CS : compspecs} sh s p, cstring sh s p |-- !! (isptr p).
+Proof.
+  intros; unfold cstring; entailer!.
+Qed.
+
+Hint Resolve cstring_local_facts : saturate_local.
+
+Lemma cstring_valid_pointer: forall {CS : compspecs} sh s p, 
+   nonempty_share sh -> 
+   cstring sh s p |-- valid_pointer p.
+Proof.
+  intros; unfold cstring; Intros.
+  apply data_at_valid_ptr; auto.
+  unfold tarray, tschar, sizeof.
+  pose proof (Zlength_nonneg s).
+  rewrite Z.max_r; omega.
+Qed.
+
+Hint Resolve cstring_valid_pointer : valid_pointer.
+Definition cstringn {CS : compspecs} sh (s: list byte) n p :=
+  !!(~In Byte.zero s) &&
+  data_at sh (tarray tschar n) (map Vbyte (s ++ [Byte.zero]) ++
+    list_repeat (Z.to_nat (n - (Zlength s + 1))) Vundef) p.
+
+Lemma cstringn_equiv : forall {CS : compspecs} sh s p, cstring sh s p = cstringn sh s (Zlength s + 1) p.
+Proof.
+  intros; unfold cstring, cstringn.
+  rewrite Zminus_diag, app_nil_r; auto.
+Qed.
+
+Lemma cstringn_local_facts: forall {CS : compspecs} sh s n p, 
+   cstringn sh s n p |-- !! (isptr p /\ Zlength s + 1 <= n).
+Proof.
+  intros; unfold cstringn; entailer!.
+  autorewrite with sublist in H1.
+  pose proof (Zlength_nonneg s).
+  pose proof (Zlength_nonneg (list_repeat (Z.to_nat (n - (Zlength s + 1))) Vundef)).
+  destruct (Z.max_spec 0 n) as [[? Hn] | [? Hn]]; rewrite Hn in *; omega.
+Qed.
+
+Hint Resolve cstringn_local_facts : saturate_local.
+
+Lemma cstringn_valid_pointer: forall {CS : compspecs} sh s n p, 
+     nonempty_share sh -> 
+     cstringn sh s n p |-- valid_pointer p.
+Proof.
+  intros.
+  entailer!. 
+  unfold cstringn; Intros.
+  apply data_at_valid_ptr; auto.
+  unfold tarray, tschar, sizeof; cbv beta iota zeta.
+  pose proof (Zlength_nonneg s).
+  rewrite Z.max_r; omega.
+Qed.
+
+Hint Resolve cstringn_valid_pointer : valid_pointer.
+
+
+Lemma Znth_zero_zero:
+  forall i, Znth i [Byte.zero] = Byte.zero.
+Proof.
+intros.
+unfold Znth.
+if_tac; auto. destruct (Z.to_nat i). reflexivity. destruct n; reflexivity.
+Qed.
+
+
+Ltac cstring :=
+  match goal with H: ~In Byte.zero _ |- _ => idtac end;
+ lazymatch goal with
+ | H1: Znth _ (_++[Byte.zero]) = Byte.zero |- _ => idtac 
+ | H1: Znth _ (_++[Byte.zero]) <> Byte.zero |- _ => idtac 
+ end;
+(* THIS TACTIC solves goals of the form,
+    ~In 0 ls,  Znth i (ls++[0]) = 0 |-  (any omega consequence of)  i < Zlength ls
+    ~In 0 ls,  Znth i (ls++[0]) <> 0 |-  (any omega consequence of)  i >= Zlength ls
+*)
+  pose_Zlength_nonneg;
+  apply Classical_Prop.NNPP; intro;
+  match goal with
+  | H: ~In Byte.zero ?ls, H1: Znth ?i (?ls' ++ [Byte.zero]) = Byte.zero |- _ =>
+     constr_eq ls ls'; apply H; rewrite <- H1;  
+    rewrite app_Znth1 by omega; apply Znth_In; omega
+  | H: ~In Byte.zero ?ls, H1: Znth ?i (?ls' ++ [Byte.zero]) <> Byte.zero |- _ =>
+     constr_eq ls ls'; apply H1;
+    rewrite app_Znth2 by omega; apply Znth_zero_zero
+ end.

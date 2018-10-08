@@ -1,4 +1,4 @@
-Require Import floyd.proofauto.
+Require Import VST.floyd.proofauto.
 Require Import sha.sha.
 Require Import sha.SHA256.
 Require Import sha.spec_sha.
@@ -25,7 +25,7 @@ Lemma loop1_aux_lemma1:
   Zlength b <= 16 ->
   upd_Znth i
           (map Vint (sublist 0 i b) ++ list_repeat (Z.to_nat (16 - i)) Vundef)
-          (Vint (Znth i b Int.zero))
+          (Vint (Znth i b))
   =  map Vint (sublist 0 (i+1) b) ++ list_repeat (Z.to_nat (16 - (i+1))) Vundef.
 Proof.
 intros.
@@ -35,7 +35,7 @@ rewrite (sublist_split 0 i (i+1)) by omega.
 rewrite map_app.
 rewrite app_ass.
 f_equal.
-rewrite (sublist_singleton i _ Int.zero) by omega.
+rewrite (sublist_len_1 i) by omega.
 simpl.
 autorewrite with sublist.
 f_equal. f_equal. f_equal. omega.
@@ -48,20 +48,20 @@ Definition block_data_order_loop1 :=
 
 Lemma sha256_block_data_order_loop1_proof:
   forall (Espec : OracleKind) (sh: share)
-     (b: list int) ctx (data: val) (regs: list int) kv Xv
+     (b: list int) ctx (data: val) (regs: list int) gv Xv
      (Hregs: length regs = 8%nat)
      (Hsh: readable_share sh),
      Zlength b = LBLOCKz ->
-     semax Delta_loop1
+     semax (func_tycontext f_sha256_block_data_order Vprog Gtot nil)
   (PROP  ()
    LOCAL  (temp _a (Vint (nthi regs 0)); temp _b (Vint (nthi regs 1));
                 temp _c (Vint (nthi regs 2)); temp _d (Vint (nthi regs 3));
                 temp _e (Vint (nthi regs 4)); temp _f (Vint (nthi regs 5));
                 temp _g (Vint (nthi regs 6)); temp _h (Vint (nthi regs 7));
                 temp _data data; temp _ctx ctx; temp _in data;
-                gvar _K256 kv; lvar _X (tarray tuint LBLOCKz) Xv)
+                gvars gv; lvar _X (tarray tuint LBLOCKz) Xv)
    SEP  (data_at_ Tsh (tarray tuint 16) Xv;
-           data_block sh (intlist_to_Zlist b) data; K_vector kv))
+           data_block sh (intlist_to_bytelist b) data; K_vector gv))
   block_data_order_loop1
   (normal_ret_assert
     (PROP ()
@@ -74,17 +74,16 @@ Lemma sha256_block_data_order_loop1_proof:
                 temp _f (Vint (nthi (Round regs (nthi b) (LBLOCKz - 1)) 5));
                 temp _g (Vint (nthi (Round regs (nthi b) (LBLOCKz - 1)) 6));
                 temp _h (Vint (nthi (Round regs (nthi b) (LBLOCKz - 1)) 7));
-                gvar _K256 kv; lvar _X (tarray tuint LBLOCKz) Xv)
-     SEP (K_vector kv;
+                gvars gv; lvar _X (tarray tuint LBLOCKz) Xv)
+     SEP (K_vector gv;
             data_at Tsh (tarray tuint LBLOCKz) (map Vint b) Xv;
-            data_block sh (intlist_to_Zlist b) data))).
+            data_block sh (intlist_to_bytelist b) data))).
 Proof.
 unfold block_data_order_loop1.
 intros.
 simpl nth.
 abbreviate_semax.
 assert (LBE := LBLOCKz_eq).
-
 forward_for_simple_bound 16
    (EX i:Z,
     PROP ()
@@ -99,30 +98,29 @@ forward_for_simple_bound 16
                  temp _g (Vint (nthi (Round regs (nthi b) (i - 1)) 6));
                  temp _h (Vint (nthi (Round regs (nthi b) (i - 1)) 7));
                  lvar _X (tarray tuint LBLOCKz) Xv;
-                 gvar _K256 kv)
-     SEP (K_vector kv;
+                 gvars gv)
+     SEP (K_vector gv;
        data_at Tsh (tarray tuint LBLOCKz)
            (map Vint (sublist 0 i b) ++ list_repeat (Z.to_nat (16-i)) Vundef)
             Xv;
-       data_block sh (intlist_to_Zlist b) data)).
+       data_block sh (intlist_to_bytelist b) data)).
 * (* precondition of loop entails the loop invariant *)
  rewrite Round_equation. rewrite if_true by (compute; auto).
- change 16 with LBLOCKz.
  entailer!.
 * (* loop body & loop condition preserves loop invariant *)
-assert_PROP (data_block sh (intlist_to_Zlist b) data =
+assert_PROP (data_block sh (intlist_to_bytelist b) data =
    array_at sh (tarray tuchar (Zlength b * 4)) [] 0 (i * 4)
-       (sublist 0 (i * 4) (map Vint (map Int.repr (intlist_to_Zlist b))))
+       (sublist 0 (i * 4) (map Vubyte (intlist_to_bytelist b)))
        data *
    data_at sh (tarray tuchar 4)
-        (map Vint (sublist (i * 4) ((i + 1) * 4) (map Int.repr (intlist_to_Zlist b))))
+        (map Vubyte (sublist (i * 4) ((i + 1) * 4) (intlist_to_bytelist b)))
         (offset_val (i * 4) data) *
    array_at sh (tarray tuchar (Zlength b * 4)) [] (i * 4 + 4)
        (Zlength b * 4)
        (sublist (4 + i * 4) (Zlength b * 4)
-          (map Vint (map Int.repr (intlist_to_Zlist b)))) data). {
+          (map Vubyte (intlist_to_bytelist b))) data). {
  entailer!.
- unfold data_block. rewrite prop_true_andp by auto.
+ unfold data_block.
  unfold data_at at 1.
    erewrite field_at_Tarray
    by (try reflexivity; auto; autorewrite with sublist; Omega1).
@@ -131,8 +129,8 @@ assert_PROP (data_block sh (intlist_to_Zlist b) data =
    autorewrite with sublist.
   rewrite <- !sepcon_assoc.
   f_equal. f_equal.
-  rewrite Zlength_intlist_to_Zlist in H5.
-  rewrite array_at_data_at_rec by (auto with field_compatible; omega).
+  rewrite Zlength_intlist_to_bytelist in H5.
+  rewrite array_at_data_at' by (auto with field_compatible; omega).
   simpl.
   autorewrite with sublist.
   fold (tarray tuchar 4). f_equal.
@@ -144,13 +142,13 @@ assert_PROP (data_block sh (intlist_to_Zlist b) data =
  }
 forward_call (* l = __builtin_read32_reversed(_data) *)
       (offset_val (i*4) data, sh,
-         sublist (i*4) ((i+1)*4) (map Int.repr (intlist_to_Zlist b))).
- entailer!; make_Vptr data; reflexivity.
+         sublist (i*4) ((i+1)*4) (intlist_to_bytelist b)).
+ entailer!.
  rewrite H1; cancel.
  autorewrite with sublist; omega.
 gather_SEP 3 0 4.
  match goal with |- context [SEPx (?A::_)] =>
-  replace A with (data_block sh (intlist_to_Zlist b) data)
+  replace A with (data_block sh (intlist_to_bytelist b) data)
     by (rewrite H1,<- !sepcon_assoc; auto)
  end.
  clear H1.
@@ -176,7 +174,7 @@ forget (nthi b) as M.
 replace (M i) with (W M i)
   by (rewrite W_equation; rewrite if_true by omega; auto).
 assert_PROP (isptr data) as H3 by entailer!.
-change (data_at Tsh (tarray tuint  (Zlength K256)) (map Vint K256)) with K_vector.
+change (data_at Tsh (tarray tuint  (Zlength K256)) (map Vint K256) (gv _K256)) with (K_vector gv).
 change (tarray tuint LBLOCKz) with (tarray tuint 16).
 match goal with |- semax _ (PROPx _ (LOCALx _ (SEPx ?R))) _ _ =>
   semax_frame [  ] R
@@ -198,7 +196,7 @@ do 8 forward.
 entailer!.
 unfold nthi; simpl nth.
 split3.
-+ rewrite Z.mul_add_distr_r; reflexivity.
++ f_equal. omega.
 + f_equal.  f_equal.
   rewrite rearrange_aux. rewrite rearrange_aux. auto.
 + f_equal. f_equal.

@@ -1,5 +1,5 @@
 Require Import Recdef.
-Require Import floyd.proofauto.
+Require Import VST.floyd.proofauto.
 Local Open Scope logic.
 Require Import List. Import ListNotations.
 Require Import sha.general_lemmas.
@@ -10,7 +10,7 @@ Require Import tweetnacl20140427.verif_salsa_base.
 
 Require Import tweetnacl20140427.tweetnaclVerifiableC.
 Require Import tweetnacl20140427.Snuffle.
-Require Import floyd.library.
+Require Import VST.floyd.library.
 
 Definition CoreInSEP (data : SixteenByte * SixteenByte * (SixteenByte * SixteenByte))
                      (v: val * val * val) : mpred :=
@@ -70,14 +70,14 @@ Definition fcore_result h data l :=
              else match data with ((Nonce, C), K) =>
                     match Nonce with (N1, N2, N3, N4) =>
                     match C with (C1, C2, C3, C4) =>
-                    l = QuadByte2ValList (littleendian_invert (Int.sub (Znth 0 x Int.zero)  (littleendian C1))) ++
-                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 5 x Int.zero)  (littleendian C2))) ++
-                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 10 x Int.zero) (littleendian C3))) ++
-                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 15 x Int.zero) (littleendian C4))) ++
-                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 6 x Int.zero)  (littleendian N1))) ++
-                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 7 x Int.zero)  (littleendian N2))) ++
-                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 8 x Int.zero)  (littleendian N3))) ++
-                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 9 x Int.zero)  (littleendian N4)))
+                    l = QuadByte2ValList (littleendian_invert (Int.sub (Znth 0 x)  (littleendian C1))) ++
+                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 5 x)  (littleendian C2))) ++
+                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 10 x) (littleendian C3))) ++
+                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 15 x) (littleendian C4))) ++
+                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 6 x)  (littleendian N1))) ++
+                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 7 x)  (littleendian N2))) ++
+                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 8 x)  (littleendian N3))) ++
+                    QuadByte2ValList (littleendian_invert (Int.sub (Znth 9 x)  (littleendian N4)))
                     end end end
   end.
 
@@ -138,7 +138,7 @@ Definition L32_spec :=
   DECLARE _L32
    WITH x : int, c: int
    PRE [ _x OF tuint, _c OF tint ]
-      PROP (0 < Int.unsigned c < 32) (*yes, c=Int.zero needs to be ruled out - it leads to undefined behaviour in the shift-right operation*)
+      PROP (0 < Int.signed c < 32) (*yes, c=Int.zero needs to be ruled out - it leads to undefined behaviour in the shift-right operation*)
       LOCAL (temp _x (Vint x); temp _c (Vint c))
       SEP ()
   POST [ tuint ]
@@ -220,7 +220,7 @@ Proof. destruct b as [[[b3 b2] b1] b0]. destruct c as [[[c3 c2] c1] c0].
   assert (0 <= 2 ^ 48 * Byte.unsigned b2). apply Z.mul_nonneg_cancel_l; trivial. 
   assert (0 <= 2 ^ 56 * Byte.unsigned b3). apply Z.mul_nonneg_cancel_l; trivial. 
   rewrite Int64.unsigned_repr.
-  Focus 2. split. clear H0 H2 H4 H6 H8 H10 H12 H14.
+  2:{ split. clear H0 H2 H4 H6 H8 H10 H12 H14.
              apply OMEGA2; trivial.
              apply OMEGA2; trivial.
              apply OMEGA2; trivial.
@@ -236,6 +236,7 @@ Proof. destruct b as [[[b3 b2] b1] b0]. destruct c as [[[c3 c2] c1] c0].
               apply Z.add_le_mono; try eassumption.  
               apply Z.add_le_mono; eassumption.
             unfold Int64.max_unsigned; simpl. omega.
+  }
   assert (0 <= Byte.unsigned c0 + 2 ^ 8 * Byte.unsigned c1 + 2 ^ 16 * Byte.unsigned c2 +
           2 ^ 24 * Byte.unsigned c3 + 2 ^ 32 * Byte.unsigned b0 + 2 ^ 40 * Byte.unsigned b1 +
           2 ^ 48 * Byte.unsigned b2 < 2 ^ 56). 
@@ -248,7 +249,7 @@ Proof. destruct b as [[[b3 b2] b1] b0]. destruct c as [[[c3 c2] c1] c0].
               apply Z.add_le_mono; try eassumption. apply Z.add_le_mono; try eassumption. 
               apply Z.add_le_mono; try eassumption. simpl. omega.
   erewrite (Zmod_unique _ (2^56) (Byte.unsigned b3)); try eassumption.
-     Focus 2. rewrite (Z.mul_comm (2^56)). rewrite Z.add_comm. reflexivity.
+     2:{ rewrite (Z.mul_comm (2^56)). rewrite Z.add_comm. reflexivity. }
   assert (0 <= Byte.unsigned c0 + 2 ^ 8 * Byte.unsigned c1 + 2 ^ 16 * Byte.unsigned c2 +
           2 ^ 24 * Byte.unsigned c3 + 2 ^ 32 * Byte.unsigned b0 + 2 ^ 40 * Byte.unsigned b1 < 2 ^ 48). 
               split. apply OMEGA2; trivial. apply OMEGA2; trivial. apply OMEGA2; trivial. apply OMEGA2; trivial. apply OMEGA2; trivial. 
@@ -259,7 +260,7 @@ Proof. destruct b as [[[b3 b2] b1] b0]. destruct c as [[[c3 c2] c1] c0].
               apply Z.add_le_mono; try eassumption. apply Z.add_le_mono; try eassumption. 
               apply Z.add_le_mono; try eassumption. apply Z.add_le_mono; try eassumption. simpl. omega. 
   erewrite (Zmod_unique _ (2^48) (Byte.unsigned b2)); try eassumption.
-     Focus 2. rewrite (Z.mul_comm (2^48)). rewrite Z.add_comm. reflexivity.
+     2:{ rewrite (Z.mul_comm (2^48)). rewrite Z.add_comm. reflexivity. }
   assert (0 <= Byte.unsigned c0 + 2 ^ 8 * Byte.unsigned c1 + 2 ^ 16 * Byte.unsigned c2 +
           2 ^ 24 * Byte.unsigned c3 + 2 ^ 32 * Byte.unsigned b0 < 2 ^ 40). 
               split. apply OMEGA2; trivial. apply OMEGA2; trivial.  apply OMEGA2; trivial.  apply OMEGA2; trivial.
@@ -269,7 +270,7 @@ Proof. destruct b as [[[b3 b2] b1] b0]. destruct c as [[[c3 c2] c1] c0].
               apply Z.add_le_mono; try eassumption. apply Z.add_le_mono; try eassumption. 
               apply Z.add_le_mono; try eassumption. simpl. omega.
   erewrite (Zmod_unique _ (2^40) (Byte.unsigned b1)); try eassumption.
-     Focus 2. rewrite (Z.mul_comm (2^40)). rewrite Z.add_comm. reflexivity.
+     2:{ rewrite (Z.mul_comm (2^40)). rewrite Z.add_comm. reflexivity. }
   assert (0 <= Byte.unsigned c0 + 2 ^ 8 * Byte.unsigned c1 + 2 ^ 16 * Byte.unsigned c2 +
           2 ^ 24 * Byte.unsigned c3 < 2 ^ 32). 
               split. apply OMEGA2; trivial. apply OMEGA2; trivial. apply OMEGA2; trivial.
@@ -278,23 +279,23 @@ Proof. destruct b as [[[b3 b2] b1] b0]. destruct c as [[[c3 c2] c1] c0].
               eapply Z.le_trans. apply Z.add_le_mono; try eassumption. 
               apply Z.add_le_mono; try eassumption. apply Z.add_le_mono; try eassumption. simpl. omega.
   erewrite (Zmod_unique _ (2^32) (Byte.unsigned b0)); try eassumption.
-     Focus 2. rewrite (Z.mul_comm (2^32)). rewrite Z.add_comm. reflexivity.
+     2:{ rewrite (Z.mul_comm (2^32)). rewrite Z.add_comm. reflexivity. }
   assert (0 <= Byte.unsigned c0 + 2 ^ 8 * Byte.unsigned c1 + 2 ^ 16 * Byte.unsigned c2 < 2 ^ 24). 
               split. apply OMEGA2; trivial. apply OMEGA2; trivial.
               assert (Byte.unsigned c0 + 2 ^ 8 * Byte.unsigned c1 + 2 ^ 16 * Byte.unsigned c2 <= 2 ^ 24 -1). 2: omega.
               eapply Z.le_trans. apply Z.add_le_mono; try eassumption. 
               apply Z.add_le_mono; try eassumption. simpl. omega.
   erewrite (Zmod_unique _ (2^24) (Byte.unsigned c3)); try eassumption.
-     Focus 2. rewrite (Z.mul_comm (2^24)). rewrite Z.add_comm. reflexivity.
+     2:{ rewrite (Z.mul_comm (2^24)). rewrite Z.add_comm. reflexivity. }
   assert (0 <= Byte.unsigned c0 + 2 ^ 8 * Byte.unsigned c1 < 2 ^ 16).
              split. apply OMEGA2; trivial.
               assert (Byte.unsigned c0 + 2 ^ 8 * Byte.unsigned c1 <= 2 ^ 16 -1). 2: omega.
               eapply Z.le_trans. apply Z.add_le_mono; try eassumption. 
               simpl. omega.
   erewrite (Zmod_unique _ (2^16) (Byte.unsigned c2)); try eassumption.
-     Focus 2. rewrite (Z.mul_comm (2^16)). rewrite Z.add_comm. reflexivity.
+     2:{ rewrite (Z.mul_comm (2^16)). rewrite Z.add_comm. reflexivity. }
   erewrite (Zmod_unique _ (2^8) (Byte.unsigned c1)).
-     Focus 2. rewrite (Z.mul_comm (2^8)). rewrite Z.add_comm. reflexivity.
+     2:{ rewrite (Z.mul_comm (2^8)). rewrite Z.add_comm. reflexivity. }
      2: apply Byte.unsigned_range. 
   erewrite (Zdiv_unique _ _ (Byte.unsigned b3));
        [  | rewrite (Z.mul_comm (2^56)), Z.add_comm; reflexivity
@@ -365,14 +366,14 @@ Definition crypto_core_salsa20_spec :=
             data_at Tsh (tarray tuchar 64) (QuadChunks2ValList (map littleendian_invert res)) out).
 
 Definition hSalsaOut x :=
-           QuadByte2ValList (littleendian_invert (Znth 0  x Int.zero)) ++
-           QuadByte2ValList (littleendian_invert (Znth 5  x Int.zero)) ++
-           QuadByte2ValList (littleendian_invert (Znth 10 x Int.zero)) ++
-           QuadByte2ValList (littleendian_invert (Znth 15 x Int.zero)) ++
-           QuadByte2ValList (littleendian_invert (Znth 6  x Int.zero)) ++
-           QuadByte2ValList (littleendian_invert (Znth 7  x Int.zero)) ++
-           QuadByte2ValList (littleendian_invert (Znth 8  x Int.zero)) ++
-           QuadByte2ValList (littleendian_invert (Znth 9  x Int.zero)).
+           QuadByte2ValList (littleendian_invert (Znth 0  x)) ++
+           QuadByte2ValList (littleendian_invert (Znth 5  x)) ++
+           QuadByte2ValList (littleendian_invert (Znth 10 x)) ++
+           QuadByte2ValList (littleendian_invert (Znth 15 x)) ++
+           QuadByte2ValList (littleendian_invert (Znth 6  x)) ++
+           QuadByte2ValList (littleendian_invert (Znth 7  x)) ++
+           QuadByte2ValList (littleendian_invert (Znth 8  x)) ++
+           QuadByte2ValList (littleendian_invert (Znth 9  x)).
 
 Definition crypto_core_hsalsa20_spec :=
   DECLARE _crypto_core_hsalsa20_tweet
@@ -389,7 +390,7 @@ Definition crypto_core_hsalsa20_spec :=
       SEP (CoreInSEP data (nonce, c, k);
            data_at Tsh (tarray tuchar 32) OUT out)
   POST [ tint ]
-       EX res:_,
+       EX res:list int,
        PROP (Snuffle 20 (prepare_data data) = Some res)
        LOCAL (temp ret_temp (Vint (Int.repr 0)))
        SEP (CoreInSEP data (nonce, c, k); data_at Tsh (tarray tuchar 32) (hSalsaOut res) out).
@@ -402,7 +403,7 @@ Fixpoint ZZ (zbytes: list byte) (n: nat): int * list byte :=
   match n with
    O => (Int.one, zbytes)
   | S k => match ZZ zbytes k with (u,zb) =>
-             let v := (Int.unsigned u + (Byte.unsigned (Znth (Z.of_nat k+8) zb Byte.zero)))
+             let v := (Int.unsigned u + (Byte.unsigned (Znth (Z.of_nat k+8) zb)))
              in (Int.shru (Int.repr v) (Int.repr 8),
                  upd_Znth (Z.of_nat k+8) zb (Byte.repr (Z.modulo v 256))) end
 
@@ -550,44 +551,44 @@ Definition crypto_stream_salsa20_xor_spec :=
   DECLARE _crypto_stream_salsa20_tweet_xor
    WITH c : val, k:val, m:val, nonce:val, b:int64,
         Nonce : SixteenByte, K: SixteenByte * SixteenByte,
-        mCont: list byte, SV:val
+        mCont: list byte, gv: globals
    PRE [ _c OF tptr tuchar, _m OF tptr tuchar, _b OF tulong,
          _n OF tptr tuchar, _k OF tptr tuchar]
       PROP (Zlength mCont = Int64.unsigned b)
       LOCAL (temp _c c; temp _m m; temp _b (Vlong b);
-             temp _n nonce; temp _k k; gvar _sigma SV)
+             temp _n nonce; temp _k k; gvars gv)
       SEP ( SByte Nonce nonce;
             data_at_ Tsh (Tarray tuchar (Int64.unsigned b) noattr) c;
             ThirtyTwoByte K k;
-            Sigma_vector SV;
+            Sigma_vector (gv _sigma);
             message_at mCont m
             (*data_at Tsh (tarray tuchar (Zlength mCont)) (Bl2VL mCont) m*))
   POST [ tint ]
        PROP ()
        LOCAL (temp ret_temp (Vint (Int.repr 0)))
-       SEP (Sigma_vector SV; ThirtyTwoByte K k;
+       SEP (Sigma_vector (gv _sigma); ThirtyTwoByte K k;
             crypto_stream_xor_postsep b Nonce K mCont (Int64.unsigned b) nonce c m).
 
 Definition f_crypto_stream_xsalsa20_tweet_xor_spec := 
   DECLARE _crypto_stream_salsa20_tweet_xor
    WITH c : val, k:val, nonce:val, m:val, d:int64, mCont: list byte,
         Nonce : SixteenByte, Nonce2 : SixteenByte, K: SixteenByte * SixteenByte,
-        SV:val
+        gv: globals
    PRE [ _c OF tptr tuchar, _m OF tptr tuchar,  _d OF tulong,
          _n OF tptr tuchar, _k OF tptr tuchar]
       PROP (Zlength mCont = Int64.unsigned d)
       LOCAL (temp _c c; temp _m m; temp _d (Vlong d);
-             temp _n nonce; temp _k k; gvar _sigma SV)
+             temp _n nonce; temp _k k; gvars gv)
       SEP ( SByte Nonce nonce; SByte Nonce2 (offset_val 16 nonce);
             data_at_ Tsh (Tarray tuchar (Int64.unsigned d) noattr) c;
             ThirtyTwoByte K k;
             message_at mCont m;
-            Sigma_vector SV
+            Sigma_vector (gv _sigma)
             (*data_at Tsh (tarray tuchar (Zlength mCont)) (Bl2VL mCont) m*))
   POST [ tint ]
        PROP ()
        LOCAL (temp ret_temp (Vint (Int.repr 0)))
-       SEP (Sigma_vector SV;
+       SEP (Sigma_vector (gv _sigma);
             EX HSalsaRes:_, crypto_stream_xor_postsep d Nonce2 HSalsaRes
               mCont (Int64.unsigned d)
               (offset_val 16 nonce) c m;
@@ -598,21 +599,21 @@ Definition f_crypto_stream_xsalsa20_tweet_spec :=
   DECLARE _crypto_stream_xsalsa20_tweet
    WITH c : val, k:val, nonce:val, d:int64,
         Nonce : SixteenByte, Nonce2 : SixteenByte, K: SixteenByte * SixteenByte,
-        SV:val
+        gv: globals
    PRE [ _c OF tptr tuchar,  _d OF tulong,
          _n OF tptr tuchar, _k OF tptr tuchar]
       PROP ()
       LOCAL (temp _c c; (*temp _m m;*) temp _d (Vlong d);
-             temp _n nonce; temp _k k; gvar _sigma SV)
+             temp _n nonce; temp _k k; gvars gv)
       SEP ( SByte Nonce nonce; SByte Nonce2 (offset_val 16 nonce);
             data_at_ Tsh (Tarray tuchar (Int64.unsigned d) noattr) c;
             ThirtyTwoByte K k;
-            Sigma_vector SV
+            Sigma_vector (gv _sigma)
             (*data_at Tsh (tarray tuchar (Zlength mCont)) (Bl2VL mCont) m*))
   POST [ tint ]
        PROP ()
        LOCAL (temp ret_temp (Vint (Int.repr 0)))
-       SEP (Sigma_vector SV;
+       SEP (Sigma_vector (gv _sigma);
             EX HSalsaRes:_, crypto_stream_xor_postsep d Nonce2 HSalsaRes
               (list_repeat (Z.to_nat (Int64.unsigned d)) Byte.zero) (Int64.unsigned d)
               (offset_val 16 nonce) c nullval;
@@ -627,21 +628,21 @@ Definition f_crypto_stream_salsa20_tweet_spec :=
   DECLARE _crypto_stream_salsa20_tweet
    WITH c : val, k:val, nonce:val, d:int64,
         Nonce : SixteenByte, K: SixteenByte * SixteenByte,
-        (*mCont: list byte, *) SV:val
+        (*mCont: list byte, *) gv: globals
    PRE [ _c OF tptr tuchar, (*_m OF tptr tuchar,*) _d OF tulong,
          _n OF tptr tuchar, _k OF tptr tuchar]
       PROP ((*Zlength mCont = Int64.unsigned b*))
       LOCAL (temp _c c; (*temp _m m;*) temp _d (Vlong d);
-             temp _n nonce; temp _k k; gvar _sigma SV)
+             temp _n nonce; temp _k k; gvars gv)
       SEP ( SByte Nonce nonce;
             data_at_ Tsh (Tarray tuchar (Int64.unsigned d) noattr) c;
             ThirtyTwoByte K k;
-            Sigma_vector SV
+            Sigma_vector (gv _sigma)
             (*data_at Tsh (tarray tuchar (Zlength mCont)) (Bl2VL mCont) m*))
   POST [ tint ] 
        PROP ()
        LOCAL (temp ret_temp (Vint (Int.repr 0)))
-       SEP (Sigma_vector SV; 
+       SEP (Sigma_vector (gv _sigma);
             ThirtyTwoByte K k;
             crypto_stream_xor_postsep d Nonce K (list_repeat (Z.to_nat (Int64.unsigned d)) Byte.zero) (Int64.unsigned d) nonce c nullval). 
 

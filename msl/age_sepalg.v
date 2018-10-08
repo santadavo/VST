@@ -2,10 +2,10 @@
  * Copyright (c) 2009-2010, Andrew Appel, Robert Dockins and Aquinas Hobor.
  *
  *)
-Require Import msl.base.
-Require Import msl.ageable.
-Require Import msl.sepalg.
-Require Import msl.sepalg_generators.
+Require Import VST.msl.base.
+Require Import VST.msl.ageable.
+Require Import VST.msl.sepalg.
+Require Import VST.msl.sepalg_generators.
 
 Class Age_alg (A:Type) {JOIN: Join A}{as_age : ageable A} :=
 mkAge {
@@ -248,7 +248,7 @@ intros.
 unfold identity in *.
 intros.
 destruct (unage_join _ H1 H) as [y [? [? [? ?]]]].
-spec H0 y x H2.
+specialize ( H0 y x H2).
 subst.
 unfold age in *. congruence.
 Qed.
@@ -285,6 +285,13 @@ Qed.
     intros. destruct H; subst.
     exists z; exists z; intuition.
   Qed.
+
+Lemma nec_identity {A} `{asaA: Age_alg A}: forall phi phi', necR phi phi'->
+    identity phi -> identity phi'.
+Proof.
+  induction 1; auto.
+  apply age_identity; auto.
+Qed.
 
 Lemma nec_join2 {A} `{asaA : Age_alg A}: forall {x y z z' : A},
        join x y z ->
@@ -455,7 +462,7 @@ Proof.
   apply IH; induction n; intros i li; inversion li; eauto.
 Qed.
 
-Lemma age_core {A}{JA: Join A}{PA: Perm_alg A}{SA: Sep_alg A}{CA: Canc_alg A}{agA: ageable A}{AgeA: Age_alg A}:
+Lemma age_core {A}{JA: Join A}{PA: Perm_alg A}{SA: Sep_alg A}{agA: ageable A}{AgeA: Age_alg A}:
   forall x y : A, age x y -> age (core x) (core y).
 Proof.
  intros. unfold age in *.
@@ -464,10 +471,14 @@ Proof.
  destruct (age1_join2 _ H0 H) as [a [b [? [? ?]]]].
  unfold age in H3. rewrite H3 in H; inv H.
  pose proof (core_unit y).
- pose proof (join_canc H1 H). subst. apply H2.
+ assert (a = core y); [|subst; auto].
+ eapply same_identity; eauto.
+ - eapply age_identity; eauto.
+   apply core_identity.
+ - apply core_identity.
 Qed.
 
-Lemma necR_core {A}{JA: Join A}{PA: Perm_alg A}{SA: Sep_alg A}{CA: Canc_alg A}{agA: ageable A}{AgeA: Age_alg A}:
+Lemma necR_core {A}{JA: Join A}{PA: Perm_alg A}{SA: Sep_alg A}{agA: ageable A}{AgeA: Age_alg A}:
   forall x y : A, necR x y -> necR (core x) (core y).
 Proof.
  induction 1.
@@ -597,7 +608,7 @@ Proof.
       * reflexivity.
 Qed.
 
-Lemma power_age_core: forall {A:Type} {agA:ageable A} {JA: Join A} {PA: Perm_alg A} {SaA: Sep_alg A} {XA: Age_alg A} {CaA: Canc_alg A} (x y: A) n,
+Lemma power_age_core: forall {A:Type} {agA:ageable A} {JA: Join A} {PA: Perm_alg A} {SaA: Sep_alg A} {XA: Age_alg A} (x y: A) n,
   relation_power n age x y -> relation_power n age (core x) (core y).
 Proof.
   intros.
@@ -738,12 +749,12 @@ Lemma power_age_parallel': forall {A:Type} {agA:ageable A} {JA: Join A} {PA: Per
 Proof.
   intros.
   assert (level x = level y).
-  Focus 1. {
+  1:{
     pose proof level_core y.
     pose proof level_core x.
     rewrite H in H2.
     congruence.
-  } Unfocus.
+  }
   destruct (power_age_parallel x x' y n H1 H0) as [y' ?H].
   exists y'.
   split; [auto |].

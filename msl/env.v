@@ -1,16 +1,16 @@
-Require Import msl.base.
-Require Import msl.boolean_alg.
-Require Import msl.sepalg.
-Require Import msl.functors.
-Require Import msl.sepalg_functors.
-Require Import msl.sepalg_generators.
-Require Import msl.shares.
-Require Import msl.cross_split.
-Require Import msl.psepalg.
-Require Import msl.pshares.
-Require Import msl.eq_dec.
+Require Import VST.msl.base.
+Require Import VST.msl.boolean_alg.
+Require Import VST.msl.sepalg.
+Require Import VST.msl.functors.
+Require Import VST.msl.sepalg_functors.
+Require Import VST.msl.sepalg_generators.
+Require Import VST.msl.shares.
+Require Import VST.msl.cross_split.
+Require Import VST.msl.psepalg.
+Require Import VST.msl.pshares.
+Require Import VST.msl.eq_dec.
 
-Require msl.predicates_sa.
+Require VST.msl.predicates_sa.
 
 Lemma in_app:   (* THIS IS FROM compcert/Coqlib.v *)
   forall (A: Type) (x: A) (l1 l2: list A), In x (l1 ++ l2) <-> In x l1 \/ In x l2.
@@ -114,7 +114,7 @@ Instance Sing_env  {SA: Sep_alg A} : Sing_alg (env key A).
 Defined.
 
 Parameter Canc_env: forall {PA: Perm_alg A}{CA: Canc_alg A}, Canc_alg (env key A). Existing Instance Canc_env.
-Parameter Disj_env: forall {DA: Disj_alg A}, Disj_alg (env key A).   Existing Instance Disj_env.
+Parameter Disj_env: forall {PA: Perm_alg A}{DA: Disj_alg A}, Disj_alg (env key A).   Existing Instance Disj_env.
 Parameter Cross_env : Cross_alg (env key A).  Existing Instance Cross_env.
 
 
@@ -123,7 +123,7 @@ Parameter Cross_env : Cross_alg (env key A).  Existing Instance Cross_env.
    either kind.  Thus, we build primitives whose names start with _ to avoid polluting the
   namespace; then we reveal them at appropriate types in EnvSL and EnvASL, below.
 *)
-Import msl.predicates_sa.
+Import VST.msl.predicates_sa.
 
 (* ENV_MAPSTO *)
 Parameter _env_mapsto: forall {KE: EqDec key}  (id: key) (sh: Share.t) (v: A), pred (env key A).
@@ -286,7 +286,7 @@ Proof.
  extensionality rho1 rho2 rho3;
 destruct rho1 as [rho1 V1]; destruct rho2 as [rho2 V2]; destruct rho3 as [rho3 V3].
 unfold Join_env, Join_fpm; simpl.
-apply prop_ext; split; intros H id; spec H id;
+apply prop_ext; split; intros H id; specialize ( H id);
 unfold env_get in * ; simpl in *; clear - H;
 destruct (rho1 id) as [[[sh1 v1] n1]| ];
 destruct (rho2 id) as [[[sh2 v2] n2]| ];
@@ -317,7 +317,7 @@ Instance Canc_env {PA: Perm_alg A}{CA: Canc_alg A}: @Canc_alg env Join_env.
 Proof.   rewrite Join_env_eq. apply Canc_fpm; auto with typeclass_instances.
 Qed.
 
-Instance Disj_env {DA: Disj_alg A}: @Disj_alg env Join_env.
+Instance Disj_env {PA: Perm_alg A}{DA: Disj_alg A}: @Disj_alg env Join_env.
 Proof.   rewrite Join_env_eq. apply Disj_fpm; auto with typeclass_instances.
 Qed.
 
@@ -372,7 +372,7 @@ Proof.
  repeat f_equal; apply proof_irr.
 Qed.
 
-Import msl.predicates_sa.
+Import VST.msl.predicates_sa.
 
 Definition _env_mapsto {KE: EqDec key} (id: key) (sh: Share.t) (v: A) : pred env :=
     fun rho => exists p,
@@ -417,7 +417,7 @@ rewrite env_get_mk_env.
 intros.
 destruct H0.
 rename x into id0.
-spec H0 id0.
+specialize ( H0 id0).
 destruct (eq_dec id id0).
 subst.
 rewrite H; rewrite H0.
@@ -431,9 +431,9 @@ auto.
 auto.
 destruct H as [?w [?w [? [[sh ?] _]]]].
 destruct H0.
-spec H0 id.
+specialize ( H0 id).
 destruct (eq_dec id id); try congruence.
-spec H id.
+specialize ( H id).
 rewrite H0 in H.
 inv H.
 econstructor; eauto.
@@ -479,7 +479,7 @@ assert (finite_idfun (fun i => if eq_dec i id then Some(mk_lifted sh2 (nonidenti
 destruct (env_finite rho) as [l ?].
 exists l; intros. destruct (eq_dec a id); auto.
 subst.
-spec H2 id H3.
+specialize ( H2 id H3).
 rewrite H in H2; inv H2.
 exists (mk_env _ H1); exists (mk_env _ H2); split; [|split]; auto.
 intro i'.
@@ -530,7 +530,7 @@ Lemma _env_mapsto_get{KE: EqDec key}: forall id sh v rho,
 Proof.
   unfold _env_mapsto, env_get.
   intros id sh v rho [p H1].
-  spec H1 id; simpl in *.
+  specialize ( H1 id); simpl in *.
   destruct (eq_dec id id); firstorder.
 Qed.
 
@@ -539,7 +539,7 @@ Lemma _env_mapsto_empty_env {KE: EqDec key} : forall id v sh,
 Proof.
   unfold not, _env_mapsto.
   intros ? ? ? [p H].
-  spec H id.
+  specialize ( H id).
   destruct (eq_dec id id); auto.
   inversion H.
 Qed.
@@ -549,7 +549,7 @@ Lemma _env_mapsto_get_neq {KE: EqDec key} : forall (id1 id2: key) (sh: Share.t) 
 Proof.
   unfold _env_mapsto.
   intros id1 id2 sh v rho Hneq [p H1].
-  spec H1 id2.
+  specialize ( H1 id2).
   destruct (eq_dec id1 id2); try contradiction ;auto.
 Qed.
 
@@ -561,9 +561,9 @@ Proof.
   intros id v sh sh1 sh2 rho H1 H2.
   destruct H2 as [rho1 [rho2 [Hrho_join [[Pf1 H_env_mapsto1] [Pf2 H_env_mapsto2]]]]].
   exists (proj2_sig sh); intro id'.
-  spec H_env_mapsto1 id'; spec H_env_mapsto2 id'.
+  specialize ( H_env_mapsto1 id'); specialize ( H_env_mapsto2 id').
   generalize Hrho_join; clear Hrho_join; unfold join; simpl; intros Hrho_join.
-  spec Hrho_join id'.
+  specialize ( Hrho_join id').
   rewrite H_env_mapsto1 in Hrho_join; rewrite H_env_mapsto2 in Hrho_join.
   destruct (eq_dec id id').
 
@@ -589,7 +589,7 @@ Proof.
   split.
 
   intros id'.
-  spec H0 id'; rewrite H0.
+  specialize ( H0 id'); rewrite H0.
   destruct (eq_dec id id') as [Hid_id'_eq | Hid_id'_neq].
 
   (* id = id' *)
@@ -684,7 +684,7 @@ Lemma env_get_join_sub {key: Type}{A: Type}: forall (rho rho': env key A) id sh 
 Proof.
 intros.
 destruct H.
-spec H id.
+specialize ( H id).
 rewrite H0 in H.
 clear H0 rho.
 destruct sh as [sh n].
@@ -738,7 +738,7 @@ rewrite in_app in H3.
 destruct (In_dec eq_dec a l1) as [H3' | H3'].
 contradiction H3; auto.
 assert (H4: ~In a l2) by intuition.
-spec H1 a H3'. spec H2 a H4.
+specialize ( H1 a H3'). specialize ( H2 a H4).
 unfold f.
 rewrite H1; rewrite H2; auto.
 exists (mk_env _ H1).
@@ -748,9 +748,9 @@ unfold f; clear H1 f.
 unfold g, h; clear g h.
 destruct (share_joins_constructive (share_of rho1 id) (share_of rho2 id) (H0 id)).
 simpl.
-spec H id. destruct H as [c ?].
+specialize ( H id). destruct H as [c ?].
 unfold share_of in *; clear share_of.
-spec H0 id.
+specialize ( H0 id).
 destruct (env_get rho1 id) as [[sh1 v1]|];
 destruct (env_get rho2 id) as [[sh2 v2]|];
 try solve [constructor].
@@ -803,9 +803,9 @@ unfold f; clear H1 f.
 unfold g, h; clear g h.
 destruct (share_join_sub_constructive (share_of rho1 id) (share_of rho2 id) (H0 id)).
 simpl.
-spec H id. destruct H as [c ?].
+specialize ( H id). destruct H as [c ?].
 unfold share_of in *; clear share_of.
-spec H0 id.
+specialize ( H0 id).
 destruct (env_get rho1 id) as [[sh1 v1]|];
 destruct (env_get rho2 id) as [[sh2 v2]|].
 inv H.
@@ -816,7 +816,7 @@ apply unit_identity with (pshare_sh sh2); apply join_comm; auto.
 destruct H4 as [? [? ?]]; simpl snd in *; subst.
 generalize (join_canc (join_comm j) (join_comm H)); intro; subst.
 destruct (dec_share_identity (lifted_obj (fst a2))).
-contradiction (@nonunit_nonidentity _ _ _ _ _ (lifted_obj (fst a2))).
+contradiction (@nonunit_nonidentity _ _ _ _ (lifted_obj (fst a2))).
 destruct (fst a2); simpl; auto.
 destruct a2; simpl in *. destruct p; simpl in *.
 constructor; simpl; auto.
@@ -826,7 +826,7 @@ inv H.
 apply bot_identity in j.
 subst.
 destruct (dec_share_identity (pshare_sh sh2)).
-contradiction (@nonunit_nonidentity _ _ _ _ _ (pshare_sh sh2)).
+contradiction (@nonunit_nonidentity _ _ _ _ (pshare_sh sh2)).
 apply pshare_nonunit.
 apply join_unit1; auto.
 f_equal. f_equal. unfold mk_lifted; destruct sh2; simpl. f_equal. apply proof_irr.
@@ -853,7 +853,7 @@ End EnvSA.
 
 Module EnvSL.
 Import EnvSA.
-Import msl.predicates_sa.
+Import VST.msl.predicates_sa.
 
 Definition env_mapsto: forall {key A}{KE: EqDec key} (id: key) (sh: Share.t) (v: A) , pred (env key A) := @_env_mapsto.
 Arguments env_mapsto [key] [A] [KE] _ _ _ _.
@@ -1032,7 +1032,7 @@ unfold restrict_env; simpl.
 repeat rewrite env_get_mk_env.
 unfold restrict_env'.
 unfold list_disjoint in H.
-spec H id id.
+specialize ( H id id).
 destruct (in_dec eq_dec id ids1).
 destruct (in_dec eq_dec id ids2).
 contradiction H; auto.
@@ -1125,7 +1125,7 @@ assert (finite_idfun (fun id => proj1_sig (f id))).
 destruct (env_finite ab) as [l1 H3].
 destruct (env_finite c) as [l2 H4].
 exists (l1++l2).
-intro id; spec H3 id; spec H4 id.
+intro id; specialize ( H3 id); specialize ( H4 id).
 intro.
 assert (~ (In id l1 \/ In id l2)).
 contradict H2.

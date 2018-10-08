@@ -3,10 +3,10 @@
  *
  *)
 
-Require Import msl.base.
-Require Import msl.functors.
-Require Import msl.sepalg.
-Require Import msl.sepalg_generators.
+Require Import VST.msl.base.
+Require Import VST.msl.functors.
+Require Import VST.msl.sepalg.
+Require Import VST.msl.sepalg_generators.
 
 Set Implicit Arguments.
 
@@ -136,14 +136,14 @@ Section CoFunSAFunctor.
   Proof with auto.
     constructor; simpl; intros; intro; intros.
     + intro i.
-      spec H i.
+      specialize ( H i).
       apply (paf_join_hom pss_rng f g _ _ _ H).
     + set (f' := fun d => paf_preserves_unmap_left pss_rng f g _ _ _ (H d)).
       exists (fun d => projT1 (f' d)).
       exists (fun d => proj1_sig (projT2 (f' d))).
       split.
-      - intro d. spec f' d.
-        destruct f' as [x [y0 [? [? ?]]]]...
+      - intro d. (*spec f' d. *)
+        destruct (f' d) as [x [y0 [? [? ?]]]]...
       - split; extensionality d;
         simpl; unfold compose, f';
         remember (paf_preserves_unmap_left pss_rng f g (x' d) (y d) (z d) (H d));
@@ -152,8 +152,8 @@ Section CoFunSAFunctor.
       exists (fun d => projT1 (f' d)).
       exists (fun d => proj1_sig (projT2 (f' d))).
       split.
-      - intro d. spec f' d.
-        destruct f' as [y0 [z [? [? ?]]]]...
+      - intro d. (*spec f' d. *)
+        destruct (f' d) as [y0 [z [? [? ?]]]]...
       - split; extensionality d;
         simpl; unfold compose, f';
         remember (paf_preserves_unmap_right pss_rng f g (x d) (y d) (z' d) (H d));
@@ -265,10 +265,9 @@ Section SepAlgSubset_Functor.
       destruct H as [x [y0 [?[??]]]].
       subst x'.
       exists (exist (fun x => @P A x) x (HPfmap2 _ _ _ Hx')).
-      assert (P y0).
-      Focus 1. {
+      assert (P y0). {
         apply (HPfmap2 f g). rewrite H1. apply HPfmap1. auto.
-      } Unfocus.
+      }
       exists (exist (fun x => @P A x) y0 H0).
       intuition.
       - simpl.
@@ -285,10 +284,9 @@ Section SepAlgSubset_Functor.
       apply (paf_preserves_unmap_right fSA) in H.
       destruct H as [y0 [z [?[??]]]].
       subst z'.
-      assert (P y0).
-      Focus 1. {
+      assert (P y0). {
         apply (HPfmap2 f g). rewrite H0. apply HPfmap1. auto.
-      } Unfocus.
+      }
       exists (exist (fun x => @P A x) y0 H1).
       exists (exist (fun x => @P A x) z (HPfmap2 _ _ _ Hz')).
       intuition.

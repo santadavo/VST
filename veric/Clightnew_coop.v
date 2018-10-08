@@ -1,8 +1,8 @@
-Require Import sepcomp.semantics.
-Require Import sepcomp.semantics_lemmas.
-Require Import sepcomp.mem_lemmas.
-Require Import veric.base.
-Require Import veric.Clight_new.
+Require Import VST.sepcomp.semantics.
+Require Import VST.sepcomp.semantics_lemmas.
+Require Import VST.sepcomp.mem_lemmas.
+Require Import VST.veric.Clight_base.
+Require Import VST.veric.Clight_new.
 
 Lemma alloc_variables_mem_step: forall cenv vars m e e2 m'
       (M: alloc_variables cenv e m vars e2 m'), mem_step m m'.
@@ -24,9 +24,9 @@ Proof. intros.
 + eapply mem_step_trans; try eassumption.
   eapply mem_step_storebytes; eassumption.
 Qed.
-Program Definition CLN_memsem :
-  @MemSem Clight.genv (*(Genv.t fundef type)*) corestate.
-apply Build_MemSem with (csem := cl_core_sem).
+Program Definition CLN_memsem (ge: genv):
+  @MemSem (*(Genv.t fundef type)*) corestate.
+apply Build_MemSem with (csem := cl_core_sem ge).
   intros.
   induction CS; try apply mem_step_refl; trivial.
   + destruct H3.
@@ -77,5 +77,5 @@ Program Definition CLN_coop_sem :
 apply Build_CoopCoreSem with (coopsem := cl_core_sem).
 apply cln_forward.
 admit. (*This is the new readonly condition which should be easy to prove.*)
-Admitted.
+Abort.
 *)

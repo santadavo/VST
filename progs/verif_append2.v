@@ -1,5 +1,5 @@
-Require Import floyd.proofauto.
-Require Import progs.append.
+Require Import VST.floyd.proofauto.
+Require Import VST.progs.append.
 Instance CompSpecs : compspecs. make_compspecs prog. Defined.
 Definition Vprog : varspecs. mk_varspecs prog. Defined.
 Definition t_struct_list := Tstruct _list noattr.
@@ -189,7 +189,7 @@ forward_if.
    apply RAMIF_Q.trans'' with (cons a).
    extensionality cts; simpl; rewrite app_ass; reflexivity.
    apply allp_right; intro. apply wand_sepcon_adjoint.
-   unfold listrep at 2; fold listrep; Exists u0.  auto.
+   unfold listrep at 2; fold listrep; Exists u0.  apply derives_refl.
  + (* after the loop *)
    forward. forward.
    Exists x. entailer!.

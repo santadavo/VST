@@ -3,7 +3,8 @@
  *
  *)
 
-Require Import msl.base.
+Require Import VST.msl.base.
+  Require Coq.funind.Recdef.
 
 Local Open Scope nat_scope.
 
@@ -83,7 +84,6 @@ Section level'.
   Variable A:Type.
   Variable ag:ageable A.
 
-  Require Coq.funind.Recdef.
   Function level' (x:A) { wf (fun x y => @age A ag y x)  x } : nat :=
 (*  Function level' (x:A) { wf (transp _ (@age A ag)) x } : nat := *)
     match age1 x with
@@ -468,11 +468,11 @@ Section PROD.
     inv Heqw'.
     split; auto.
     apply rt_refl.
-    spec IHclos_refl_trans1 n x0 (fst y) (snd y).
+    specialize (IHclos_refl_trans1 n x0 (fst y) (snd y)).
     spec IHclos_refl_trans1; auto.
     spec IHclos_refl_trans1; destruct y; auto.
     simpl in *.
-    spec IHclos_refl_trans2 a b n' x'.
+    specialize (IHclos_refl_trans2 a b n' x').
     spec IHclos_refl_trans2; auto.
     spec IHclos_refl_trans2; auto.
     intuition. eapply rt_trans; eauto.
@@ -500,11 +500,11 @@ Section PROD.
     case_eq (age1 n); intros; rewrite H0 in H; inv H.
     split; auto.
     apply t_step. compute. auto.
-    spec IHclos_trans1 n x0 (fst y) (snd y).
+    specialize (IHclos_trans1 n x0 (fst y) (snd y)).
     spec IHclos_trans1; auto.
     spec IHclos_trans1; destruct y; auto.
     simpl in *.
-    spec IHclos_trans2 a b n' x'.
+    specialize (IHclos_trans2 a b n' x').
     spec IHclos_trans2; auto.
     spec IHclos_trans2; auto.
     intuition. eapply t_trans; eauto.
@@ -574,11 +574,11 @@ Section PROD'.
     inv Heqw'.
     split; auto.
     apply rt_refl.
-    spec IHclos_refl_trans1 n x0 (snd y) (fst y).
+    specialize (IHclos_refl_trans1 n x0 (snd y) (fst y)).
     spec IHclos_refl_trans1; auto.
     spec IHclos_refl_trans1; destruct y; auto.
     simpl in *.
-    spec IHclos_refl_trans2 b a n' x'.
+    specialize ( IHclos_refl_trans2 b a n' x').
     spec IHclos_refl_trans2; auto.
     spec IHclos_refl_trans2; auto.
     intuition. eapply rt_trans; eauto.
@@ -606,11 +606,11 @@ Section PROD'.
     case_eq (age1 n); intros; rewrite H0 in H; inv H.
     split; auto.
     apply t_step. compute. auto.
-    spec IHclos_trans1 n x0 (snd y) (fst y).
+    specialize (IHclos_trans1 n x0 (snd y) (fst y)).
     spec IHclos_trans1; auto.
     spec IHclos_trans1; destruct y; auto.
     simpl in *.
-    spec IHclos_trans2 b a n' x'.
+    specialize ( IHclos_trans2 b a n' x').
     spec IHclos_trans2; auto.
     spec IHclos_trans2; auto.
     intuition. eapply t_trans; eauto.

@@ -1,36 +1,28 @@
-Require Import Coq.Strings.String.
-
+Require Import compcert.lib.Coqlib.
 Require Import compcert.lib.Integers.
 Require Import compcert.common.AST.
-Require Import compcert.cfrontend.Clight.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Memdata.
 Require Import compcert.common.Values.
 
-Require Import msl.Coqlib2.
-Require Import msl.eq_dec.
-Require Import msl.seplog.
-Require Import veric.initial_world.
-Require Import veric.juicy_mem.
-Require Import veric.juicy_mem_lemmas.
-Require Import veric.semax_prog.
-Require Import veric.compcert_rmaps.
-Require Import veric.Clight_new.
-Require Import veric.Clightnew_coop.
-Require Import veric.semax.
-Require Import veric.semax_ext.
-Require Import veric.juicy_extspec.
-Require Import veric.initial_world.
-Require Import veric.juicy_extspec.
-Require Import veric.tycontext.
-Require Import veric.semax_ext.
-Require Import veric.res_predicates.
-Require Import sepcomp.semantics.
-Require Import sepcomp.step_lemmas.
-Require Import sepcomp.event_semantics.
-Require Import sepcomp.structured_injections.
-Require Import sepcomp.extspec.
+Require Import VST.msl.Coqlib2.
+Require Import VST.msl.eq_dec.
+Require Import VST.msl.seplog.
+Require Import VST.veric.Memory.
+Require Import VST.veric.juicy_mem. 
+Require Import VST.veric.juicy_extspec.
+
+Require Import VST.veric.res_predicates.
+
+(*Lenb: Should Imports from sepcomp really be here?*)
+Require Import VST.sepcomp.extspec.
+
+(*Require Import VST.sepcomp.event_semantics.
+Require Import VST.sepcomp.extspec.*)
+(*Lenb: Should stuff that requires Imports from sepcomp really be here?*)
+
+Notation val_inject := Val.inject. (*as in sepcomp.mem_lemmas*)
 
 Definition mem_lessdef m1 m2 :=
   (forall b ofs len v,
@@ -55,6 +47,9 @@ Definition mem_equiv m1 m2 :=
   Mem.perm m1 = Mem.perm m2 /\
   Mem.nextblock m1 = Mem.nextblock m2.
 
+Lemma perm_order_pp_refl p: Mem.perm_order'' p p.
+Proof. unfold Mem.perm_order''. destruct p; trivial. apply perm_refl. Qed.
+
 Lemma same_perm_spec m1 m2 :
   Mem.perm m1 = Mem.perm m2 <->
   (forall k x, access_at m1 x k = access_at m2 x k).
@@ -63,7 +58,7 @@ Proof.
   - intros k (b, ofs).
     match type of E with ?f = ?g => assert (S : forall b z k p, f b z k p <-> g b z k p) end.
     { rewrite E; tauto. } clear E.
-    spec S b ofs k. revert S.
+    specialize (S b ofs k). revert S.
     unfold access_at, Mem.perm. simpl.
     set (o1 := (Mem.mem_access _) !! b ofs k).
     set (o2 := (Mem.mem_access _) !! b ofs k). clearbody o1 o2. intros S.
@@ -73,8 +68,8 @@ Proof.
     destruct (S' o1) as [A _]. spec A. apply perm_order_pp_refl.
     destruct (S' o2) as [_ B]. spec B. apply perm_order_pp_refl.
     destruct o1 as [[]|], o2 as [[]|]; auto; simpl in *.
-    all: inv A; inv B; auto.
-  - extensionality b ofs k. spec E k (b, ofs).
+    all: try solve [inv A; inv B; auto].
+  - extensionality b ofs k. specialize (E k (b, ofs)).
     unfold access_at in *.
     simpl in E.
     unfold Mem.perm in *.
@@ -115,7 +110,7 @@ Proof.
         revert ofs.
         induction n; auto; intros ofs p.
         simpl. f_equal.
-        -- spec E (b, ofs).
+        -- specialize (E (b, ofs)).
            unfold contents_at in *.
            simpl in E.
            apply E.
@@ -172,7 +167,7 @@ Proof.
   unfold inject_id in *.
   f_equal. congruence.
   replace delta with 0%Z by congruence.
-  symmetry; apply Int.add_zero.
+  symmetry; apply Ptrofs.add_zero.
 Qed.
 
 Lemma memval_lessdef_antisym v1 v2 : memval_lessdef v1 v2 -> memval_lessdef v2 v1 -> v1 = v2.
@@ -273,19 +268,154 @@ Proof.
   apply mem_lessalloc_lessdef, mem_equiv_lessalloc, H.
 Qed.
 
-Lemma cl_step_mem_lessdef_sim {ge c m1 c' m1' m2} :
-  mem_lessdef m1 m2 ->
-  @cl_step ge c m1 c' m1' ->
-  exists m2',
-    mem_lessdef m1' m2' /\
-    @cl_step ge c m2 c' m2'.
-Admitted.
+Lemma mem_lessdef_valid_pointer:
+  forall m1 m2 b z, 
+       mem_lessdef m1 m2 ->
+       Mem.valid_pointer m1 b z = true ->
+       Mem.valid_pointer m2 b z = true.
+Proof.
+intros.
+destruct H as [? [? ?]].
+unfold Mem.valid_pointer in *.
+destruct (Mem.perm_dec m1 b z Cur Nonempty); inv H0.
+destruct (Mem.perm_dec m2 b z Cur Nonempty); try reflexivity.
+contradiction n. clear n.
+apply H1; auto.
+Qed.
 
-Lemma eval_expr_mem_lessaloc {ge ve te m a v}:
-  eval_expr ge ve te m a v ->
-  forall m2 (L : mem_lessalloc m m2),
-  eval_expr ge ve te m2 a v.
-Admitted.
+Lemma mem_lessdef_weak_valid_pointer:
+  forall m1 m2 b z, 
+       mem_lessdef m1 m2 ->
+       Mem.weak_valid_pointer m1 b z = true ->
+       Mem.weak_valid_pointer m2 b z = true.
+Proof.
+intros.
+unfold Mem.weak_valid_pointer in *.
+rewrite orb_true_iff in *.
+destruct H0; [left|right]; eapply mem_lessdef_valid_pointer; eauto.
+Qed.
+
+Ltac memval_lessdef_tac :=
+match goal with
+ | H: memval_lessdef ?a ?b |- _ => destruct a,b; inv H
+ | H: list_forall2 _ ?a ?b |- _ => destruct a,b; inv H
+ | H: proj_bytes ?a = Some _ |- _ => match a with context [nil] => inv H end
+end;
+ try discriminate;
+ try solve [unfold decode_val; simpl; auto] .
+
+Lemma mem_lessdef_proj_bytes:
+  forall vl vl',
+  list_forall2 memval_lessdef vl vl' ->
+  forall bl, proj_bytes vl = Some bl -> proj_bytes vl' = Some bl.
+Proof.
+intros.
+revert bl H0; induction H; intros; auto.
+destruct bl0; inv H1.
+destruct a1; auto.
+inv H3.
+destruct (proj_bytes al) eqn:?H; inv H3. inv H3.
+destruct a1; try discriminate.
+destruct (proj_bytes al) eqn:?H; inv H3.
+specialize (IHlist_forall2 _ (eq_refl _)).
+inv H.
+simpl.
+rewrite IHlist_forall2.
+auto.
+Qed.
+
+Lemma mem_lessdef_decode_val:
+  forall ch vl vl', list_forall2 memval_lessdef vl vl' ->
+    Val.lessdef (decode_val ch vl) (decode_val ch vl').
+Proof.
+intros.
+unfold decode_val.
+destruct (proj_bytes vl) eqn:?H.
+2: {
+     unfold proj_value.
+     destruct ch; auto.
+     +
+       destruct Archi.ptr64; auto.
+       destruct vl; auto.
+       destruct m; auto.
+       destruct (check_value (size_quantity_nat Q32) v Q32 (Fragment v q n :: vl)) eqn:?; auto.
+       destruct vl'; inv H.
+       inv H4.
+       unfold proj_bytes.
+       destruct (Val.eq v Vundef).
+       subst.
+       simpl. auto.
+       assert (H9: check_value (size_quantity_nat Q32) v2 Q32 (Fragment v2 q n :: vl') = true).
+       2: rewrite H9; apply Val.load_result_lessdef; apply val_inject_id; auto.
+       assert (v2=v).
+       apply val_inject_id in H5.
+       destruct v; try solve [contradiction n0; auto]; inv H5; auto.
+       subst v2.
+       clear H5.
+       eapply (check_value_inject inject_id); try eassumption.
+       constructor; auto.
+       constructor; auto.
+       apply val_inject_id; apply Val.lessdef_refl.
+       apply val_inject_id; apply Val.lessdef_refl.
+     +
+       destruct vl; auto.
+       destruct m; auto.
+       destruct (check_value (size_quantity_nat Q32) v Q32 (Fragment v q n :: vl)) eqn:?; auto.
+       destruct vl'; inv H.
+       unfold proj_bytes.
+       inv H4.
+       destruct (Val.eq v Vundef).
+       subst.
+       simpl. auto.
+       assert (H9: check_value (size_quantity_nat Q32) v2 Q32 (Fragment v2 q n :: vl') = true).
+       2: rewrite H9; apply Val.load_result_lessdef; apply val_inject_id; auto.
+       assert (v2=v).
+       apply val_inject_id in H5.
+       destruct v; try solve [contradiction n0; auto]; inv H5; auto.
+       subst v2.
+       clear H5.
+       eapply (check_value_inject inject_id); try eassumption.
+       constructor; auto.
+       constructor; auto.
+       apply val_inject_id; apply Val.lessdef_refl.
+       apply val_inject_id; apply Val.lessdef_refl.
+     +
+       destruct vl; auto.
+       destruct m; auto.
+       destruct (check_value (size_quantity_nat Q64) v Q64 (Fragment v q n :: vl)) eqn:?; auto.
+       destruct vl'; inv H.
+       unfold proj_bytes.
+       inv H4.
+       destruct (Val.eq v Vundef).
+       subst.
+       simpl. auto.
+       assert (H9: check_value (size_quantity_nat Q64) v2 Q64 (Fragment v2 q n :: vl') = true).
+       2: rewrite H9; apply Val.load_result_lessdef; apply val_inject_id; auto.
+       assert (v2=v).
+       apply val_inject_id in H5.
+       destruct v; try solve [contradiction n0; auto]; inv H5; auto.
+       subst v2.
+       clear H5.
+       eapply (check_value_inject inject_id); try eassumption.
+       constructor; auto.
+       constructor; auto.
+       apply val_inject_id; apply Val.lessdef_refl.
+       apply val_inject_id; apply Val.lessdef_refl.
+     } 
+rewrite (mem_lessdef_proj_bytes _ _ H _ H0).
+auto.
+Qed.
+
+Lemma mem_lessdef_loadbytes:
+  forall m1 m2, mem_lessdef m1 m2 ->
+  forall b z n v1, Mem.loadbytes m1 b z n = Some v1 ->
+  exists v2, list_forall2 memval_lessdef v1 v2 /\ Mem.loadbytes m2 b z n = Some v2.
+Proof.
+intros.
+destruct H as [? [? ?]].
+apply H in H0.
+destruct H0 as [v2 [? ?]]; exists v2; split; auto.
+Qed.
 
 Lemma valid_pointer_lessalloc {m m2} (M:mem_lessalloc m m2):
       Mem.valid_pointer m = Mem.valid_pointer m2.
@@ -305,322 +435,6 @@ Proof.
   rewrite (valid_pointer_lessalloc M); trivial.
 Qed.
 
-Lemma unaryop_mem_lessaloc {op u t m v m2}
-      (V: sem_unary_operation op u t m = Some v)
-      (M:mem_lessalloc m m2):
-      sem_unary_operation op u t m2 = Some v.
-Proof. destruct op; simpl; inv V; try econstructor.
-unfold sem_notbool.
-remember (classify_bool t) as c.
-destruct c; trivial.
-destruct u; trivial.
-rewrite (weak_valid_pointer_lessalloc M); trivial.
-Qed.
-
-Lemma sem_cast_mem_lessaloc {v t d m m2} (M:mem_lessalloc m m2):
-      sem_cast v t d m = sem_cast v t d m2.
-Proof.
-unfold sem_cast.
-destruct (classify_cast t d); trivial.
-destruct v; trivial.
-rewrite (weak_valid_pointer_lessalloc M); trivial.
-Qed.
-
-Lemma sem_cmp_mem_lessalloc {f v1 t1 v2 t2 m m2} (M : mem_lessalloc m m2):
-      sem_cmp f v1 t1 v2 t2 m2 = sem_cmp f v1 t1 v2 t2 m.
-Proof. unfold sem_cmp.
-  destruct (classify_cmp t1 t2).
-  - rewrite (valid_pointer_lessalloc M); trivial.
-  - rewrite (valid_pointer_lessalloc M); trivial.
-  - rewrite (valid_pointer_lessalloc M); trivial.
-  - unfold sem_binarith.
-    do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-Qed.
-
-Lemma binaryop_mem_lessaloc {ge op v1 t1 v2 t2 m v m2}
-      (V: sem_binary_operation ge op v1 t1 v2 t2 m = Some v)
-      (M:mem_lessalloc m m2):
-      sem_binary_operation ge op v1 t1 v2 t2 m2 = Some v.
-Proof. destruct op; simpl; inv V; try econstructor; clear -M.
-+ unfold sem_add.
-  remember (classify_add t1 t2) as c.
-  destruct c.
-  - destruct v1; trivial.
-  - destruct v1; trivial.
-  - destruct v1; trivial.
-  - destruct v1; trivial.
-  - unfold sem_binarith.
-    do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ unfold sem_sub.
-  remember (classify_sub t1 t2) as c.
-  destruct c.
-  - destruct v1; trivial.
-  - destruct v1; trivial.
-  - destruct v1; trivial.
-  - unfold sem_binarith.
-    do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ unfold sem_mul.
-  unfold sem_binarith.
-  do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ unfold sem_div.
-  unfold sem_binarith.
-  do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ unfold sem_mod.
-  unfold sem_binarith.
-  do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ unfold sem_and.
-  unfold sem_binarith.
-  do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ unfold sem_or.
-  unfold sem_binarith.
-  do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ unfold sem_xor.
-  unfold sem_binarith.
-  do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ unfold sem_cmp.
-  destruct (classify_cmp t1 t2).
-  - rewrite (valid_pointer_lessalloc M); trivial.
-  - rewrite (valid_pointer_lessalloc M); trivial.
-  - rewrite (valid_pointer_lessalloc M); trivial.
-  - unfold sem_binarith.
-    do 2 rewrite (sem_cast_mem_lessaloc M); trivial.
-+ apply (sem_cmp_mem_lessalloc M).
-+ apply (sem_cmp_mem_lessalloc M).
-+ apply (sem_cmp_mem_lessalloc M).
-+ apply (sem_cmp_mem_lessalloc M).
-+ apply (sem_cmp_mem_lessalloc M).
-Qed.
-
-Lemma eval_expr_eval_lvalue_mem_lessalloc ge ve te m:
-     (forall (e : expr) (v : val),
-        eval_expr ge ve te m e v ->
-        forall m2 : mem, mem_lessalloc m m2 -> eval_expr ge ve te m2 e v) /\
-     (forall (e : expr) (b : block) (i : int),
-        eval_lvalue ge ve te m e b i ->
-        forall m2 : mem, mem_lessalloc m m2 -> eval_lvalue ge ve te m2 e b i).
-Proof. apply eval_expr_lvalue_ind; intros; try solve [econstructor; eauto].
-+ econstructor; eauto. eapply unaryop_mem_lessaloc; eauto.
-+ econstructor; eauto. eapply binaryop_mem_lessaloc; eauto.
-+ econstructor; eauto. rewrite <- H1. symmetry. apply sem_cast_mem_lessaloc; trivial.
-+ econstructor; eauto.
-  destruct H2 as [M1 [M2 M3]].
-  inv H1; simpl in *.
-  - eapply deref_loc_value; eauto.
-    simpl. destruct (Mem.load_loadbytes _ _ _ _ _ H3) as [vals [X Y]]; subst.
-    rewrite M1 in X. apply Mem.load_valid_access in H3. destruct H3.
-    eapply Mem.loadbytes_load; trivial.
-  - apply deref_loc_reference; trivial.
-  - apply deref_loc_copy; trivial.
-Qed.
-
-Lemma eval_expr_mem_lessalloc {ge ve te m m2 e v} (M:mem_lessalloc m m2):
-      eval_expr ge ve te m e v -> eval_expr ge ve te m2 e v.
-Proof. intros. eapply eval_expr_eval_lvalue_mem_lessalloc; eauto. Qed.
-
-Lemma eval_exprlist_mem_lessalloc {ge ve te}:
-      forall al tyargs vargs m m2 (M:mem_lessalloc m m2)
-             (E:eval_exprlist ge ve te m al tyargs vargs),
-      eval_exprlist ge ve te m2 al tyargs vargs.
-Proof.
-  induction al; simpl; intros; inv E.
-   econstructor.
-   apply (eval_expr_mem_lessalloc M) in H1.
-   rewrite (sem_cast_mem_lessaloc M) in H2. econstructor; eauto.
-Qed.
-
-Lemma eval_lvalue_mem_lessalloc {ge ve te m m2 e b i} (M:mem_lessalloc m m2):
-      eval_lvalue ge ve te m e b i -> eval_lvalue ge ve te m2 e b i.
-Proof. intros. eapply eval_expr_eval_lvalue_mem_lessalloc; eauto. Qed.
-
-Lemma storebytes_mem_lessalloc {m loc ofs bytes m' m2} (M:mem_lessalloc m m2)
-      (ST:Mem.storebytes m loc ofs bytes = Some m'):
-      exists m2', Mem.storebytes m2 loc ofs bytes = Some m2' /\
-                  mem_lessalloc m' m2'.
-Proof.
-destruct M as [M1 [M2 M3]].
-destruct (Mem.range_perm_storebytes m2 loc ofs bytes) as [m2' ST2].
-{ red; intros. rewrite <- M2. eapply Mem.storebytes_range_perm; eassumption. }
-exists m2'; split; trivial.
-split; [| split].
-+ extensionality b. extensionality z. extensionality n.
-  (*should hold -here's a partial proof*)
-  destruct (zlt n 0).
-  - rewrite Mem.loadbytes_empty; try omega. rewrite Mem.loadbytes_empty; try omega. trivial.
-  - destruct (eq_block loc b); subst.
-    * destruct (zle (z + n) ofs).
-      ++ rewrite (Mem.loadbytes_storebytes_other _ _ _ _ _ ST); auto.
-         rewrite (Mem.loadbytes_storebytes_other _ _ _ _ _ ST2); auto.
-         rewrite M1; trivial.
-      ++ destruct (zle (ofs + Z.of_nat (Datatypes.length bytes)) z).
-         -- rewrite (Mem.loadbytes_storebytes_other _ _ _ _ _ ST); auto.
-            rewrite (Mem.loadbytes_storebytes_other _ _ _ _ _ ST2); auto.
-            rewrite M1; trivial.
-         -- (*should be ok specialize Z.le_exists_sub. assert (exists k, ofs = z+n-k /\ k>0).*) admit. (*rewrite (Mem.loadbytes_concat m' b z )*)
-    * rewrite (Mem.loadbytes_storebytes_other _ _ _ _ _ ST); auto.
-      rewrite (Mem.loadbytes_storebytes_other _ _ _ _ _ ST2); auto.
-      rewrite M1; trivial.
-+ apply Mem.storebytes_access in ST. apply Mem.storebytes_access in ST2.
-  extensionality b. extensionality z. extensionality k. extensionality p.
-  unfold Mem.perm. rewrite ST, ST2.
-  assert (Mem.perm m b z k p = Mem.perm m2 b z k p). rewrite M2; trivial.
-  apply H.
-+ apply Mem.nextblock_storebytes in ST. apply Mem.nextblock_storebytes in ST2.
-  rewrite ST, ST2. xomega.
-Admitted.
-
-Lemma free_mem_lessalloc m b lo hi m' (FR:Mem.free m b lo hi = Some m')
-      m2 (M:mem_lessalloc m m2):
-      exists m2', Mem.free m2 b lo hi = Some m2' /\ mem_lessalloc m' m2'.
-Proof.
-specialize (Mem.free_range_perm _ _ _ _ _ FR); intros RP.
-apply Mem.free_result in FR. subst m'.
-destruct M as [M1 [M2 M3]].
-destruct (Mem.range_perm_free m2 b lo hi) as [m2' FR'].
-{ red; intros. rewrite <- M2. apply RP; trivial. }
-exists m2'; split; trivial.
-apply Mem.free_result in FR'. subst m2'.
-split; [|split]; simpl; trivial.
-+ admit. (*loadbytes -- should be ok*)
-+ unfold Mem.unchecked_free, Mem.perm; simpl. extensionality bb.
-  extensionality z. extensionality k. extensionality p.
-  do 2 rewrite PMap.gsspec.
-  destruct (peq bb b); subst.
-  assert (Mem.perm m b z k p = Mem.perm m2 b z k p). rewrite M2; trivial.
-  clear M2. destruct (zle lo z && zlt z hi); trivial.
-  assert (Mem.perm m bb z k p = Mem.perm m2 bb z k p). rewrite M2; trivial.
-  trivial.
-Admitted.
-
-Lemma freelist_mem_lessalloc: forall l m m' (FR:Mem.free_list m l = Some m')
-      m2 (M:mem_lessalloc m m2),
-      exists m2', Mem.free_list m2 l = Some m2' /\ mem_lessalloc m' m2'.
-Proof.
-  induction l; simpl; intros.
-+ inv FR. exists m2; split; trivial.
-+ destruct a as [[b lo] hi]. remember (Mem.free m b lo hi) as q.
-  destruct q; inv FR; symmetry in Heqq.
-  specialize (IHl _ _ H0); clear H0.
-  destruct (free_mem_lessalloc _ _ _ _ _ Heqq _ M) as [m2' [FR2 M2]].
-  rewrite FR2; eauto.
-Qed.
-
-Lemma store_mem_lessalloc {m chunk b ofs v m' m2} (M:mem_lessalloc m m2)
-      (ST:Mem.store chunk m b ofs v = Some m'):
-      exists m2', Mem.store chunk m2 b ofs v = Some m2' /\
-                  mem_lessalloc m' m2'.
-Proof.
- exploit Mem.store_storebytes; eauto. intros.
- apply Mem.store_valid_access_3 in ST. destruct ST.
- apply (storebytes_mem_lessalloc M) in H.
- destruct H as [m2' [ST2 M2]].
- exists m2'; split; trivial.
- apply Mem.storebytes_store; eauto.
-Qed.
-
-Lemma assign_loc_mem_lessalloc {ge t m loc ofs v m' m2} (M:mem_lessalloc m m2):
-      assign_loc ge t m loc ofs v m' ->
-      exists m2', mem_lessalloc m' m2' /\ assign_loc ge t m2 loc ofs v m2'.
-Proof. destruct 1; simpl in *.
-+ destruct (store_mem_lessalloc M H0) as [m2' [ST2 M2]].
-  exists m2'; split; eauto. eapply assign_loc_value; eauto.
-+ destruct (storebytes_mem_lessalloc M H4) as [m2' [ST2 M2']].
-  destruct M as [M1 [M2 M3]]. rewrite M1 in H3.
-  exists m2'; split; trivial.
-  eapply assign_loc_copy; eauto.
-Qed.
-
-Lemma alloc_variables_mem_lessalloc {ge ve}: forall vars e m m1
-      (A:alloc_variables ge e m vars ve m1) m' (M:mem_lessalloc m m'),
-      exists m1', alloc_variables ge e m' vars ve m1' /\ mem_lessalloc m1 m1'.
-Proof. intros vars e m m1 A.
-  induction A; intros.
-+ exists m'; split; eauto. constructor.
-+ remember (sizeof ty) as sz.
-  remember (Mem.alloc m' 0 sz). destruct p as [m1' b1']. symmetry in Heqp.
-  (*2 issues: a) mem_lessalloc m1 m1' does not necessarily hold
-              b) if b1<>b1', id will be set different in the two executions*)
-  (*Maybe it's possible to egenralize the statement of this lemma suitably...*)
-(*  destruct (IHA _ H0) as [m2' [X Y]]. subst sz.
-  exists m2'; split; trivial. econstructor. eauto. *)
-Admitted.
-
-Lemma cl_step_mem_lessalloc_sim {ge c m1 c' m1' m2} :
-  mem_lessalloc m1 m2 ->
-  @cl_step ge c m1 c' m1' ->
-  exists m2',
-    mem_lessalloc m1' m2' /\
-    @cl_step ge c m2 c' m2'.
-(* we cannot use [cl_step_mem_lessdef_sim] directly because
-[mem_lessalloc] does not imply [mem_lessdef] in both
-directions. However, the proof must be simpler. *)
-Proof.
-intros M STEP. generalize dependent m2.
-induction STEP; intros.
-+ apply (eval_expr_mem_lessalloc M) in H1.
-  apply (eval_lvalue_mem_lessalloc M) in H0.
-  rewrite (sem_cast_mem_lessaloc M) in H2.
-  destruct (assign_loc_mem_lessalloc M H3) as [m2' [M2' ASS2]].
-  exists m2'; split; trivial. econstructor; eauto.
-+ exists m2; split; trivial.
-  apply (eval_expr_mem_lessalloc M) in H. constructor; trivial.
-+ apply (eval_expr_mem_lessalloc M) in H0.
-  apply (eval_exprlist_mem_lessalloc _ _ _ _ _ M) in H1.
-  (* here - we have the same initial ve in both cases, so I think
-     it'll be difficult to generalize the alloc_variables lemma above suitably*)
-  destruct (alloc_variables_mem_lessalloc _ _ _ _ H5 _ M) as [m2' [AV' M']].
-  exists m2'; split; trivial.
-  econstructor; eauto.
-+ exists m2; split; trivial.
-  apply (eval_expr_mem_lessalloc M) in H0.
-  apply (eval_exprlist_mem_lessalloc _ _ _ _ _ M) in H1.
-  econstructor; eauto.
-+ destruct (IHSTEP _ M) as [m2' [L' STEP']].
-  exists m2'; split; trivial. econstructor; eassumption.
-+ destruct (IHSTEP _ M) as [m2' [L' STEP']].
-  exists m2'; split; trivial. econstructor; eassumption.
-+ destruct (IHSTEP _ M) as [m2' [L' STEP']].
-  exists m2'; split; trivial. econstructor; eassumption.
-+ destruct (IHSTEP _ M) as [m2' [L' STEP']].
-  exists m2'; split; trivial. econstructor; eassumption.
-+ exists m2; split; trivial.
-  apply (eval_expr_mem_lessalloc M) in H.
-  econstructor; eauto.
-  unfold bool_val in *. destruct (classify_bool (typeof a)); trivial.
-  destruct v1; trivial. rewrite <- (weak_valid_pointer_lessalloc M); trivial.
-+ exists m2; split; trivial. econstructor.
-+ exists m2; split; trivial. constructor.
-+ destruct (freelist_mem_lessalloc _ _ _ H0 _ M) as [m2' [FL2 M2]].
-  exists m2'; split; trivial. econstructor; eauto.
-  destruct optexp; trivial.
-  destruct H1 as [v [E SC]]. apply (eval_expr_mem_lessalloc M) in E.
-  rewrite (sem_cast_mem_lessaloc M) in SC.
-  exists v; split; trivial.
-+ exists m2; split; trivial.
-  apply (eval_expr_mem_lessalloc M) in H.
-  econstructor; eauto.
-+ destruct (IHSTEP _ M) as [m2' [L' STEP']].
-  exists m2'; split; trivial. econstructor; eassumption.
-+ exists m2; split; trivial. econstructor; eauto.
-Qed.
-
-Lemma cl_step_mem_equiv_sim {ge c m1 c' m1' m2} :
-  mem_equiv m1 m2 ->
-  @cl_step ge c m1 c' m1' ->
-  exists m2',
-    mem_equiv m1' m2' /\
-    @cl_step ge c m2 c' m2'.
-Proof.
-  intros E S1.
-  pose proof mem_equiv_lessdef _ _ E as L12.
-  pose proof mem_equiv_lessdef _ _ (mem_equiv_sym _ _ E) as L21.
-  destruct (cl_step_mem_lessdef_sim L12 S1) as (m2' & L12' & S2).
-  destruct (cl_step_mem_lessdef_sim L21 S2) as (m1'' & L21' & S1').
-  exists m2'; split; auto.
-  apply mem_lessdef_equiv; auto.
-  cut (m1'' = m1'). intros <-; auto.
-  pose proof semax_lemmas.cl_corestep_fun' ge _ _ _ _ _ _ S1 S1'.
-  congruence.
-Qed.
 
 Definition juicy_mem_equiv jm1 jm2 := mem_equiv (m_dry jm1) (m_dry jm2) /\ m_phi jm1 = m_phi jm2.
 
@@ -628,94 +442,13 @@ Definition juicy_mem_lessdef jm1 jm2 := mem_lessdef (m_dry jm1) (m_dry jm2) /\ m
 
 Definition juicy_mem_lessalloc jm1 jm2 := mem_lessdef (m_dry jm1) (m_dry jm2) /\ m_phi jm1 = m_phi jm2.
 
-Lemma mem_equiv_juicy_mem_equiv jm1 m2 :
-  mem_equiv (m_dry jm1) m2 ->
-  exists jm2,
-    m_dry jm2 = m2 /\
-    juicy_mem_equiv jm1 jm2.
-Proof.
-  intros E.
-  refine (ex_intro _ (mkJuicyMem m2 (m_phi jm1) _ _ _ _) _); repeat (split; auto).
-  Unshelve.
-  all: destruct jm1 as [m1 phi Con Acc Max All]; simpl in *.
-  all: destruct E as (Load & Perm & Next).
-    (* I'll admit this for now. It should take less time to prove once
-    the new mem interface is there. *)
-Admitted.
-
-Lemma mem_lessdef_juicy_mem_lessdef jm1 m2 :
-  mem_lessdef (m_dry jm1) m2 ->
-  exists jm2,
-    m_dry jm2 = m2 /\
-    juicy_mem_lessdef jm1 jm2.
-Proof.
-  (* not sure about that one! [contents_cohere] should be ok, but
-  [access_cohere] does not have a reason to be *)
-Admitted.
-
-Lemma mem_lessalloc_juicy_mem_lessdef jm1 m2 :
-  mem_lessalloc (m_dry jm1) m2 ->
-  exists jm2,
-    m_dry jm2 = m2 /\
-    juicy_mem_lessalloc jm1 jm2.
-Proof.
-  (* this one is fine, we need to prove that if two memories are
-  mem_lessalloc then the difference of nextblock is only None's *)
-Admitted.
-
-Lemma juicy_step_mem_equiv_sim {ge c jm1 c' jm1' jm2} :
-  juicy_mem_equiv jm1 jm2 ->
-  corestep (juicy_core_sem cl_core_sem) ge c jm1 c' jm1' ->
-  exists jm2',
-    juicy_mem_equiv jm1' jm2' /\
-    corestep (juicy_core_sem cl_core_sem) ge c jm2 c' jm2'.
-Proof.
-  intros [Ed Ew] [step [rd lev]].
-  destruct (cl_step_mem_equiv_sim Ed step) as [m2' [Ed' Sd']].
-  destruct (mem_equiv_juicy_mem_equiv jm1' m2' Ed') as (jm2', (<-, [Hd Hw])).
-  exists jm2'.
-  split; split; auto. split.
-  - cut (Mem.nextblock (m_dry jm1) = Mem.nextblock (m_dry jm2)). congruence.
-    apply Ed.
-  - repeat rewrite level_juice_level_phi in *.
-    congruence.
-Qed.
-
 Ltac sync D :=
   first
     [ split; [destruct D as [D _] | destruct D as [_ D]]
-    | destruct D as [D|D]; [left|right]
+    | destruct D as [|D]; [left|right]
     | let x := fresh in destruct D as (x, D); exists x
-    | let x := fresh in intro x; spec D x
+    | let x := fresh in intro x; specialize (D x)
     ].
-
-Lemma juicy_step_mem_lessdef_sim {ge c jm1 c' jm1' jm2} :
-  juicy_mem_lessdef jm1 jm2 ->
-  corestep (juicy_core_sem cl_core_sem) ge c jm1 c' jm1' ->
-  exists jm2',
-    juicy_mem_lessdef jm1' jm2' /\
-    corestep (juicy_core_sem cl_core_sem) ge c jm2 c' jm2'.
-Proof.
-  intros [Ed Ew] [step D].
-  destruct (cl_step_mem_lessdef_sim Ed step) as [m2' [Ed' Sd']].
-  destruct (mem_lessdef_juicy_mem_lessdef jm1' m2' Ed') as (jm2', (<-, [Hd Hw])).
-  exists jm2'.
-  split; split; auto.
-  repeat rewrite level_juice_level_phi in *.
-
-  repeat sync D.
-
-  all: try rewrite <-Ew; try rewrite <-Hw; try assumption.
-
-  - intros out. apply D.
-    unfold mem_lessdef in *.
-    zify.
-    omega.
-
-  - unfold mem_lessdef in *.
-    zify.
-    Fail omega. (* not true, maybe we can still resource_decay them somehow *)
-Admitted.
 
 Definition ext_spec_stable {M E Z} (R : M -> M -> Prop)
            (spec : external_specification M E Z) :=
@@ -728,11 +461,49 @@ Definition ext_spec_stable {M E Z} (R : M -> M -> Prop)
     ext_spec_exit spec e v m1 ->
     ext_spec_exit spec e v m2).
 
-Lemma jsafeN_mem_equiv {Z Jspec ge n z c jm1 jm2} :
+(* Currently fails because jsafeN__ind is too weak. 
+Lemma jsafeN__mem_equiv {G C Z HH Sem Jspec ge n z c jm1 jm2} :
   juicy_mem_equiv jm1 jm2 ->
   ext_spec_stable juicy_mem_equiv (JE_spec _ Jspec) ->
-  @jsafeN Z Jspec ge n z c jm1 ->
-  @jsafeN Z Jspec ge n z c jm2.
+  @jsafeN_ G Z C HH Sem Jspec ge n z c jm1 ->
+  @jsafeN_ G Z C HH Sem Jspec ge n z c jm2.
+Proof.  intros E [Spre Sexit] S1.
+  revert jm2 E. 
+  induction S1 as
+      [ z c jm1
+      | n z c jm1 c' jm1' step safe IH
+      | n z c jm1 ef args x atex Pre Post
+      | n z c jm1 v Halt Exit ]; intros jm2 E.
+
+  - constructor 1.
+
+  - destruct (juicy_step_mem_equiv_sim E step) as (jm2' & E' & step').
+    econstructor 2; eauto.
+    apply IH, E'.
+
+  - econstructor 3 with (x := x); eauto.
+    intros ret jm2' z' n' Hargsty Hretty Hn [-> [lev pure]] post.
+    destruct (Post ret jm2' z' _ Hargsty Hretty Hn) as (c' & atex' & safe'); auto.
+    + split; auto.
+      destruct E as [Ed Ew].
+      unfold juicy_safety.pures_eq in *.
+      unfold juicy_safety.pures_sub in *.
+      split.
+      * repeat rewrite level_juice_level_phi in *.
+        congruence.
+      * revert pure.
+        rewrite Ew.
+        auto.
+    + exists c'; split; auto.
+
+  - econstructor 4; eauto.
+Qed.
+
+Lemma jsafeN__mem_equiv {G C Z HH Sem Jspec ge n z c jm1 jm2} :
+  juicy_mem_equiv jm1 jm2 ->
+  ext_spec_stable juicy_mem_equiv (JE_spec _ Jspec) ->
+  @jsafeN_ G Z C HH Sem Jspec ge n z c jm1 ->
+  @jsafeN_ G Z C HH Sem Jspec ge n z c jm2.
 Proof.
   intros E [Spre Sexit] S1.
   revert jm2 E.
@@ -802,7 +573,7 @@ Proof.
     + exists c'; split; auto.
 
   - econstructor 4; eauto.
-Qed.
+Qed.*)
 
 Lemma mem_ext m1 m2 :
   Mem.mem_contents m1 = Mem.mem_contents m2 ->

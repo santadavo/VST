@@ -1676,7 +1676,7 @@ Qed.
 (** Another well-used function for having the logarithm of a real number x to the base #&beta;# *)
 Record ln_beta_prop x := {
   ln_beta_val :> Z ;
-   _ : (x <> 0)%R -> (bpow (ln_beta_val - 1)%Z <= Rabs x < bpow ln_beta_val)%R
+  _ : (x <> 0)%R -> (bpow (ln_beta_val - 1)%Z <= Rabs x < bpow ln_beta_val)%R
 }.
 
 Definition ln_beta :
@@ -1842,10 +1842,13 @@ Qed.
 
 Lemma ln_beta_lt_pos :
   forall x y,
-  (0 < x)%R -> (0 < y)%R ->
+  (0 < y)%R ->
   (ln_beta x < ln_beta y)%Z -> (x < y)%R.
 Proof.
-intros x y Px Py.
+intros x y Py.
+case (Rle_or_lt x 0); intros Px.
+intros H.
+now apply Rle_lt_trans with 0%R.
 destruct (ln_beta x) as (ex, Hex).
 destruct (ln_beta y) as (ey, Hey).
 simpl.
@@ -2099,7 +2102,7 @@ assert (Hbeta : (2 <= r)%Z).
 { destruct r as (beta_val,beta_prop).
   now apply Zle_bool_imp_le. }
 intros x y Px Py Hln.
-assert (Oxy : (y < x)%R); [now apply ln_beta_lt_pos; [| |omega]|].
+assert (Oxy : (y < x)%R); [apply ln_beta_lt_pos;[assumption|omega]|].
 destruct (ln_beta x) as (ex,Hex).
 destruct (ln_beta y) as (ey,Hey).
 simpl in Hln |- *.

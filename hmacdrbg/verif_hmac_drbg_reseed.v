@@ -1,4 +1,4 @@
-Require Import floyd.proofauto.
+Require Import VST.floyd.proofauto.
 Import ListNotations.
 Local Open Scope logic.
 
@@ -19,11 +19,11 @@ Lemma body_hmac_drbg_reseed: semax_body HmacDrbgVarSpecs HmacDrbgFunSpecs
        f_mbedtls_hmac_drbg_reseed hmac_drbg_reseed_spec.
 Proof.
   start_function.
-  rename lvar0 into seed.
+  rename v_seed into seed.
   destruct I.
   destruct initial_state as [md_ctx' [V' [reseed_counter' [entropy_len' [prediction_resistance' reseed_interval']]]]].
   unfold hmac256drbg_relate.
-  Intros. simpl in *.
+  Intros.
   rename H into XH1.
   rename H0 into XH2.
   rename H1 into XH3.
@@ -36,13 +36,12 @@ Proof.
   rename H8 into XH10.
   rename H9 into XH11.
   rename H10 into XH12.
-  rename H11 into XH13.
+  simpl in XH2, XH4, El2, XH6, XH7 |- *.
   rewrite da_emp_isptrornull. (*needed later*)
   rewrite data_at_isptr with (p:=ctx).
   Intros.
 
   (* entropy_len = ctx->entropy_len *)
-  simpl in *.
   remember (contents_with_add additional add_len contents) as contents'.
   assert (ZLc': Zlength contents' = 0 \/ Zlength contents' = Zlength contents).
     { subst contents'. unfold contents_with_add.
@@ -60,41 +59,24 @@ Proof.
   (* if (len > MBEDTLS_HMAC_DRBG_MAX_INPUT ||
         entropy_len + len > MBEDTLS_HMAC_DRBG_MAX_SEED_INPUT) *)
   freeze [0;1] FR2.
-  forward_if (PROP  ()
-      LOCAL  (temp _entropy_len (Vint (Int.repr entropy_len));
-      lvar _seed (tarray tuchar 384) seed; temp _ctx ctx;
-      temp _additional additional; temp _len (Vint (Int.repr add_len));
-      temp _t'1 (Val.of_bool add_len_too_high);
-      gvar sha._K256 kv)
-      SEP  (FRZL FR2)).
+  forward_if (temp _t'1 (Val.of_bool add_len_too_high)).
   { forward. entailer!. }
   { forward. entailer!. simpl.
       unfold Int.ltu; simpl.
-      rewrite add_repr.
-      rewrite Int.unsigned_repr. 2: rewrite int_max_unsigned_eq; omega.
+      rewrite Int.unsigned_repr by rep_omega.
       rewrite Int.unsigned_repr_eq, Zmod_small.
       + destruct (zlt 384 (entropy_len + (Zlength contents))); simpl; try reflexivity.
-      + omega.
+      + rep_omega.
   }
 
-  forward_if (PROP  (add_len_too_high = false)
-      LOCAL  (temp _entropy_len (Vint (Int.repr entropy_len));
-      lvar _seed (tarray tuchar 384) seed; temp _ctx ctx;
-      temp _additional additional; temp _len (Vint (Int.repr add_len));
-      gvar sha._K256 kv)
-      SEP (FRZL FR2)
-  ).
+  forward_if. 
   { rewrite H in *. subst add_len_too_high. forward.
-    Exists seed (Vint (Int.neg (Int.repr 5))). normalize. entailer!.
+    Exists (Vint (Int.neg (Int.repr 5))). normalize. entailer!.
     unfold reseedPOST. simpl; rewrite <- Heqadd_len_too_high.
     (*remember (zlt 256 (Zlength contents) || zlt 384 (entropy_len + Zlength contents))%bool as c.
     destruct c; simpl in Heqadd_len_too_high; try discriminate.*)
     normalize. apply andp_right. apply prop_right; repeat split; trivial.
     thaw FR2. thaw FR1. cancel.
-  }
-  {
-    forward.
-    entailer!.
   }
   Intros. rewrite H in *; clear H add_len_too_high.
   symmetry in Heqadd_len_too_high; apply orb_false_iff in Heqadd_len_too_high; destruct Heqadd_len_too_high.
@@ -124,18 +106,18 @@ Proof.
     solve [rewrite Zplus_minus; assumption].
     rewrite list_repeat_app, Z2Nat.inj_sub; try omega. rewrite le_plus_minus_r; trivial. apply Z2Nat.inj_le; try omega.
   }
-  flatten_sepcon_in_SEP.
+  Intros.
 
   replace_SEP 0 (memory_block Tsh entropy_len seed).
   {
     (*subst entropy_len.*) go_lower.
-     eapply derives_trans. apply data_at_memory_block. simpl. rewrite Z.max_r, Z.mul_1_l; trivial.
+     eapply derives_trans. apply data_at_memory_block. simpl. rewrite Z.max_r, Z.mul_1_l; auto.
   }
 
   (* get_entropy(seed, entropy_len ) *)
   thaw FR3. freeze [1;2;3;4;6;7] FR4. 
   forward_call (Tsh, s, seed, entropy_len).
-  { split. split; try omega. rewrite int_max_unsigned_eq. omega.
+  { split. split; try omega. rep_omega.
     apply writable_share_top.
 (*
     subst entropy_len; auto.*)
@@ -160,19 +142,21 @@ Proof.
   
   (* if( get_entropy(seed, entropy_len ) != 0 ) *)
   freeze [0;1;2] FR5.
-  forward_if (
-      PROP  (vret=Vzero)
+  forward_if (vret=Vzero).
+(*
+  forward_if (PROP  (vret=Vzero)
       LOCAL  (temp _t'2 vret;
       temp _entropy_len (Vint (Int.repr entropy_len));
       lvar _seed (tarray tuchar 384) seed; temp _ctx ctx;
       temp _additional additional; temp _len (Vint (Int.repr add_len));
-      gvar sha._K256 kv)
+      gvars gv)
       SEP (FRZL FR5)
   ).
+*)
   {
     (* != 0 case *)
     forward.
-    Exists seed (Vint (Int.neg (Int.repr (9)))). entailer!. 
+    Exists (Vint (Int.neg (Int.repr (9)))). entailer!. 
     unfold reseedPOST.
     remember ((zlt 256 (Zlength contents)
        || zlt 384
@@ -204,15 +188,15 @@ Proof.
       entailer!. thaw FR4; cancel.
       rewrite data_at__memory_block. entailer!.
       destruct seed; inv Pseed. unfold offset_val.
-      rewrite <- Int.repr_unsigned with (i:=i). 
+      rewrite <- Ptrofs.repr_unsigned with (i:=i). 
       assert (XX: sizeof (tarray tuchar 384) = entropy_len + (384 - entropy_len)) by (simpl; omega). 
       rewrite XX.
-      rewrite (memory_block_split Tsh b (Int.unsigned i) entropy_len (384 - entropy_len)), add_repr; try omega.
+      rewrite (memory_block_split Tsh b (Ptrofs.unsigned i) entropy_len (384 - entropy_len)), ptrofs_add_repr; try omega.
       cancel.
       eapply derives_trans. apply data_at_memory_block.
-          simpl. rewrite Z.max_r, Z.mul_1_l; try omega; trivial.
-      rewrite Zplus_minus. cbv; trivial.
-      assert (Int.unsigned i >= 0) by (pose proof (Int.unsigned_range i); omega).
+          simpl. rewrite Z.max_r, Z.mul_1_l; try omega; auto.
+      rewrite Zplus_minus.
+      assert (Ptrofs.unsigned i >= 0) by (pose proof (Ptrofs.unsigned_range i); omega).
       split. omega.
       clear - Hfield. red in Hfield; simpl in Hfield. omega.
   }
@@ -236,7 +220,12 @@ Proof.
 
   rename l into entropy_bytes.
   thaw FR5. thaw FR4. unfold GetEntropy_PostSep. rewrite <- Heqentropy_result.
-  eapply reseed_REST with (s0:=s0)(contents':=contents'); trivial.
+  deadvars!.
+  subst MORE_COMMANDS; unfold abbreviate.
+  subst entropy_len'. subst POSTCONDITION; unfold abbreviate.
+  rewrite <- XH7.
+  simple eapply reseed_REST  with (s0:=s0)(contents':=contents'); try eassumption;
+    auto.
 idtac "Timing the Qed of drbg_reseed (goal: 25secs)". omega. 
 Time Qed. (*May23th, Coq8.6:12secs
            Feb 23 2017: Finished transaction in 105.344 secs (74.078u,0.015s) (successful)*)

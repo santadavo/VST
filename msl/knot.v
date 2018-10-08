@@ -3,10 +3,10 @@
  *
  *)
 
-Require Import msl.base.
-Require Import msl.ageable.
+Require Import VST.msl.base.
+Require Import VST.msl.ageable.
 Require Import Coq.Logic.Eqdep_dec.
-Require Import msl.functors.
+Require Import VST.msl.functors.
 
 Import CovariantFunctor.
 Import CovariantFunctorLemmas.
@@ -292,9 +292,9 @@ Module Knot (TF':TY_FUNCTOR) : KNOT with Module TF:=TF'.
     clear Hr.
     rewrite H0 in H.
     assert (m < (r +  S m)) by omega.
-    spec IHn p w.
+    specialize ( IHn p w).
     rewrite H0 in IHn.
-    spec IHn H1.
+    specialize ( IHn H1).
     revert IHn.
     unfold unstratify.
     rewrite Hw.

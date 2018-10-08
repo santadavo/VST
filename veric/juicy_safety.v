@@ -3,14 +3,13 @@ Require Import compcert.common.AST.
 Require Import compcert.common.Values.
 Require Import compcert.common.Globalenvs.
 
-Require Import msl.ageable.
+Require Import VST.msl.ageable.
 
-Require Import sepcomp.semantics.
-Require Import sepcomp.extspec.
-Require Import sepcomp.step_lemmas.
+Require Import VST.sepcomp.extspec.
+Require Import VST.sepcomp.step_lemmas.
 
-Require Import veric.compcert_rmaps.
-Require Import veric.juicy_mem.
+Require Import VST.veric.compcert_rmaps.
+Require Import VST.veric.juicy_mem.
 
 Definition pures_sub (phi phi' : rmap) :=
   forall adr,
@@ -26,7 +25,7 @@ Lemma pures_sub_trans phi1 phi2 phi3 :
   pures_sub phi2 phi3 ->
   pures_sub phi1 phi3.
 Proof.
-  intros lev S1 S2. intros l; spec S1 l; spec S2 l.
+  intros lev S1 S2. intros l; specialize (S1 l); specialize (S2 l).
   destruct (phi1 @ l); auto.
   rewrite S1 in S2. rewrite S2.
   f_equal.
@@ -65,18 +64,6 @@ Lemma pures_eq_trans phi1 phi2 phi3 :
   pures_eq phi1 phi3.
 Proof.
   intros lev [S1 E1] [S2 E2]; split. apply pures_sub_trans with phi2; auto.
-  intros l; spec E1 l; spec E2 l.
+  intros l; specialize (E1 l); specialize (E2 l).
   destruct (phi3 @ l); auto. destruct E2 as (pp, E2). rewrite E2 in E1; auto.
 Qed.
-
-Section juicy_safety.
-  Context {G C Z:Type}.
-  Context (genv_symb: G -> PTree.t block).
-  Context (Hcore:@CoreSemantics G C juicy_mem).
-  Variable (Hspec:external_specification juicy_mem external_function Z).
-  Definition Hrel n' m m' :=
-    n' = level m' /\
-    (level m' < level m)%nat /\
-    pures_eq (m_phi m) (m_phi m').
-  Definition safeN := @safeN_ G C juicy_mem Z genv_symb Hrel Hcore Hspec.
-End juicy_safety.

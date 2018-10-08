@@ -3,12 +3,12 @@
  *
  *)
 
-Require Import msl.base.
-Require Import msl.sepalg.
-Require Import msl.psepalg.
-Require Import msl.sepalg_generators.
-Require Import msl.cjoins.
-Require Import msl.eq_dec.
+Require Import VST.msl.base.
+Require Import VST.msl.sepalg.
+Require Import VST.msl.psepalg.
+Require Import VST.msl.sepalg_generators.
+Require Import VST.msl.cjoins.
+Require Import VST.msl.eq_dec.
 
 (** The cross split axiom looks unwieldly,
     but here we show that it arises naturally
@@ -219,7 +219,7 @@ Proof.
   auto.
 Qed.
 
-Lemma constructive_join_sub_smash {A} {JA: Join A}{PA: Perm_alg A}{SA: Sep_alg A}{CA: Canc_alg A}:
+Lemma constructive_join_sub_smash {A} {JA: Join A}{PA: Perm_alg A}{SA: Sep_alg A}{CA: Disj_alg A}:
   (forall x:A, {identity x}+{~identity x}) ->
   forall a c : lifted JA,
     constructive_join_sub (proj1_sig a) (proj1_sig c) ->
@@ -240,7 +240,7 @@ destruct a; destruct c; simpl in *.
 auto.
 Qed.
 
-Lemma sa_distributive_smash : forall A JA {PA: Perm_alg A}{SA: Sep_alg A}{CA: Canc_alg A},
+Lemma sa_distributive_smash : forall A JA {PA: Perm_alg A}{SA: Sep_alg A}{CA: Disj_alg A},
   (forall x:A, {identity x}+{~identity x}) ->
   @sa_distributive A JA ->
   sa_distributive (option (lifted JA)).
@@ -287,7 +287,7 @@ apply constructive_join_sub_smash; auto.
 constructor; auto.
 Qed.
 
-Lemma Cross_smash : forall A (JA: Join A) {PA: Perm_alg A}{SA: Sep_alg A}{CA: Canc_alg A},
+Lemma Cross_smash : forall A (JA: Join A) {PA: Perm_alg A}{SA: Sep_alg A}{CA: Disj_alg A},
   (forall x:A, {identity x}+{~identity x}) ->
   Cross_alg A ->
   Cross_alg (option (lifted JA)).
@@ -295,23 +295,26 @@ Proof.
   intros.
   hnf; intros.
   destruct a as [[a Na] | ].
-Focus 2.
+2:{
   apply join_unit1_e in H; [ | apply None_identity]. subst z.
   exists (None,None,c,d); repeat split; auto; constructor; auto.
+}
   destruct b as [[b Nb] | ].
-Focus 2.
+2:{
   apply join_unit2_e in H; [ | apply None_identity]. subst z.
   exists (c,d,None,None); repeat split; auto; constructor; auto.
+}
   destruct c as [[c Nc] | ].
-Focus 2.
+2:{
   apply join_unit1_e in H0; [ | apply None_identity]. subst z.
   exists (None, Some (exist nonunit _ Na), None, Some (exist nonunit _ Nb));
      repeat split; auto; constructor.
+}
   destruct d as [[d Nd] | ].
-Focus 2.
+2:{
   apply join_unit2_e in H0; [ | apply None_identity]. subst z.
   exists (Some (exist nonunit _ Na), None,Some (exist nonunit _ Nb),None); repeat split; auto; constructor; auto.
-
+}
   destruct z as [[z Nz] | ]; [ | elimtype False; inv H].
   destruct (X0 a b c d z) as [[[[ac ad] bc] bd] [? [? [? ?]]]]; try (inv H; inv H0; auto). clear H H0.
   destruct (X ac) as [Nac | Nac ].
@@ -359,7 +362,7 @@ Focus 2.
 Qed.
 
 Lemma cross_split_fpm : forall A B
-      (JB: Join B) (PB: Perm_alg B)(SB : Sep_alg B)(CB: Canc_alg B)
+      (JB: Join B) (PB: Perm_alg B)(SB : Sep_alg B)(CB: Disj_alg B)
   (Bdec: forall x:B, {identity x}+{~identity x}) ,
   Cross_alg B  ->
   Cross_alg (fpm A (lifted JB)) .
@@ -377,23 +380,23 @@ Proof.
   destruct Ha.
   exists x.
   intros.
-  spec H1 a0.
+  specialize ( H1 a0).
   rewrite e in H1; auto. inv H1; auto.
   assert (Hq : finMap q).
   destruct Hb.
   exists x.
   intros.
-  spec H3 a0. inv H3; auto. rewrite H9; rewrite e; auto.
+  specialize ( H3 a0). inv H3; auto. rewrite H9; rewrite e; auto.
   rewrite e in H8; auto. inv H8.
   assert (Hr : finMap r).
   destruct Hb.
   exists x.
   intros.
-  spec H3 a0.
+  specialize ( H3 a0).
   rewrite e in H3; auto. inv H3; auto.
   assert (Hp : finMap p).
   destruct Hd.
-  exists x. intros. spec H5 a0. rewrite e in H5; auto. inv H5; auto.
+  exists x. intros. specialize ( H5 a0). rewrite e in H5; auto. inv H5; auto.
   exists (exist _ s Hs, exist _ p Hp, exist _ q Hq, exist _ r Hr).
   simpl; intuition.
 Qed.
@@ -466,23 +469,23 @@ Proof.
   destruct Ha.
   exists x.
   intros.
-  spec H1 a0.
+  specialize ( H1 a0).
   rewrite e in H1; auto. inv H1; auto.
   assert (Hq : finMap q).
   destruct Hb.
   exists x.
   intros.
-  spec H3 a0. inv H3; auto. rewrite H9; rewrite e; auto.
+  specialize ( H3 a0). inv H3; auto. rewrite H9; rewrite e; auto.
   rewrite e in H8; auto. inv H8.
   assert (Hr : finMap r).
   destruct Hb.
   exists x.
   intros.
-  spec H3 a0.
+  specialize ( H3 a0).
   rewrite e in H3; auto. inv H3; auto.
   assert (Hp : finMap p).
   destruct Hd.
-  exists x. intros. spec H5 a0. rewrite e in H5; auto. inv H5; auto.
+  exists x. intros. specialize ( H5 a0). rewrite e in H5; auto. inv H5; auto.
   exists (exist _ s Hs, exist _ p Hp, exist _ q Hq, exist _ r Hr).
   simpl; intuition.
 Qed.

@@ -1,8 +1,8 @@
-Require Import veric.rmaps.
-Require Import progs.conclib.
-Require Import progs.conc_queue.
+Require Import VST.veric.rmaps.
+Require Import VST.progs.conclib.
+Require Import VST.progs.conc_queue.
 Require Import SetoidList.
-Require Import floyd.library.
+Require Import VST.floyd.library.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -134,7 +134,7 @@ Qed.
 Next Obligation.
 Proof.
 
-(* How do we prove super_non_expansive of an existential? Use exp_approx from veric/seplog. *)
+(* How do we prove super_non_expansive of an existential? Use exp_approx from veric/seplog / veric/Clight_seplog. *)
 Admitted.*)
 
 Definition surely_malloc_spec' :=

@@ -1,18 +1,18 @@
-Require Import floyd.base2.
+Require Import VST.floyd.base2.
 
-Require Import floyd.client_lemmas.
-Require Import floyd.nested_field_lemmas.
-Require Import floyd.efield_lemmas.
-Require Import floyd.mapsto_memory_block.
-Require Import floyd.reptype_lemmas.
-Require Import floyd.data_at_rec_lemmas.
-Require Import floyd.field_at.
-Require Import floyd.stronger.
-Require Import floyd.entailer.
-Require Import floyd.closed_lemmas.
-Require Import floyd.proj_reptype_lemmas.
-Require Import floyd.replace_refill_reptype_lemmas.
-Require Import floyd.loadstore_field_at.
+Require Import VST.floyd.client_lemmas.
+Require Import VST.floyd.nested_field_lemmas.
+Require Import VST.floyd.efield_lemmas.
+Require Import VST.floyd.mapsto_memory_block.
+Require Import VST.floyd.reptype_lemmas.
+Require Import VST.floyd.data_at_rec_lemmas.
+Require Import VST.floyd.field_at.
+Require Import VST.floyd.stronger.
+Require Import VST.floyd.entailer.
+Require Import VST.floyd.closed_lemmas.
+Require Import VST.floyd.proj_reptype_lemmas.
+Require Import VST.floyd.replace_refill_reptype_lemmas.
+Require Import VST.floyd.loadstore_field_at.
 Import DataCmpNotations.
 
 Local Open Scope logic.
@@ -117,7 +117,7 @@ Proof.
         !!JMeq v0' v0'' -->
         (field_at sh t (gfs SUB i) v0' p -*
          array_at sh t gfs 0 z (upd_Znth (i - 0) v' v0'') p))).
-    Focus 2. {
+    2:{
       rewrite Z.sub_0_r.
       clear v0 H.
       apply pred_ext.
@@ -156,7 +156,7 @@ Proof.
         revert v' v0' H4 H5; rewrite nested_field_type_ind with (gfs0 := cons _ _), H2; simpl; intros.
         apply JMeq_eq in H4; apply JMeq_eq in H5.
         subst; apply JMeq_refl.
-    } Unfocus.
+    }
     apply (array_at_ramif sh t gfs t0 z a 0 z i v' v0 p); auto.
     eapply JMeq_trans; [apply @JMeq_sym, H |]; clear v0 H.
     revert v v' H4.
@@ -189,9 +189,9 @@ Proof.
       cbv iota beta in v''.
       unfold reptype_structlist in v''.
       unfold nested_reptype_structlist in v'.
-      apply (proj_compact_prod_JMeq _ (i, field_type i (co_members (get_co i0)))
+      apply (@proj_compact_prod_JMeq _ (i, field_type i (co_members (get_co i0)))
              _
-             (fun it => reptype (nested_field_type t (gfs DOT fst it)))
+             (fun it : prod ident type => @reptype cs (@nested_field_type cs t (@cons gfield (StructField (@fst ident type it)) gfs)))
              (fun it => reptype (field_type (fst it) (co_members (get_co i0))))); auto.
       * intros.
         rewrite nested_field_type_ind, H2; reflexivity.
@@ -237,7 +237,7 @@ Proof.
       cbv iota beta in v''.
       unfold reptype_structlist in v''.
       unfold nested_reptype_unionlist in v'.
-      apply (proj_compact_sum_JMeq' _ (i, field_type i (co_members (get_co i0)))
+      apply (@proj_compact_sum_JMeq' _ (i, field_type i (co_members (get_co i0)))
              _
              (fun it => reptype (nested_field_type t (gfs UDOT fst it)))
              (fun it => reptype (field_type (fst it) (co_members (get_co i0))))); auto.

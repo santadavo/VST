@@ -3,10 +3,10 @@
  *
  *)
 
-Require Import msl.base.
-Require Import msl.eq_dec.
-Require Import msl.sepalg.
-Require Import msl.sepalg_generators.
+Require Import VST.msl.base.
+Require Import VST.msl.eq_dec.
+Require Import VST.msl.sepalg.
+Require Import VST.msl.sepalg_generators.
 
 (* Other definitions and facts about psepalgs *)
 
@@ -31,9 +31,9 @@ Lemma pfull_pmaximal {A} {JA: Join A} {PA: Perm_alg A} {Pos_A: Pos_alg A} : full
 Proof with eauto.
   extensionality a.  apply prop_ext. split; repeat intro.
   destruct H0 as [a' ?]. unfold full in H.
-  spec H a'. spec H...
+  specialize (H a'). spec H...
   destruct H0 as [c ?].
-  spec H c. spec H... subst. apply join_comm in H0. 
+  specialize (H c). spec H... subst. apply join_comm in H0. 
   apply no_units in H0. contradiction.
 Qed.
 
@@ -44,7 +44,7 @@ Proof.
   destruct H.
   destruct H0.
   destruct (join_assoc (join_comm H) (join_comm H0)) as [? [? _]].
-  rewrite (join_self H1) in H1.
+  rewrite (join_self H1) in H1 by auto.
   eapply no_units; eauto.
 Qed.
 
@@ -129,7 +129,11 @@ Section PSA_LIFT.
 
   Instance Disj_lift {DA: Disj_alg A}: Disj_alg lifted.
   Proof.
-    repeat intro. do 2 red in H.  apply join_self in H.  destruct a; destruct b; simpl in *; subst;
+    repeat intro. destruct a, b; hnf in H.
+    simpl in H; apply join_self in H.
+    destruct a0, b0.
+    hnf in H0; simpl in H0.
+    specialize (H _ _ H0); subst.
     f_equal.  apply proof_irr.
   Qed.
 
@@ -184,7 +188,7 @@ Section PSA_LIFT.
     do 2 red in H0. simpl in H0.
     unfold full in H.
     simpl in H.
-    spec H sigma'. spec H; eauto.
+    specialize (H sigma'). spec H; eauto.
     intros ? ? ?. destruct a0, b. do 2 red in H1. simpl in H1. apply H in H1.
     subst; f_equal; auto.  apply proof_irr.
   Qed.
@@ -254,9 +258,11 @@ Section SA_LOWER.
    f_equal. apply (join_canc H1 H4). 
  Qed.
 
-   Instance Disj_lower {DA: Disj_alg A}: @Disj_alg _ Join_lower.
-  Proof. repeat intro. 
-     icase a; inv H; auto. apply join_self in H2; f_equal; auto.
+  Instance Disj_lower {psa_A: Pos_alg A}{DA: Disj_alg A}: @Disj_alg _ Join_lower.
+  Proof. repeat intro. inv H0; inv H; auto.
+    - contradiction (no_units a1 a1).
+      apply identity_unit; [eapply join_self | eexists]; eauto.
+    - eapply f_equal, join_self; eauto.
   Qed.
 
 End SA_LOWER.
@@ -264,7 +270,7 @@ Arguments Perm_lower _ [Pj_A][PA_A].
 Arguments Sep_lower _ [Pj_A].
 Arguments Sing_lower _ [Pj_A].
 Arguments Canc_lower _ [Pj_A][psa_A][CA] _ _ _ _ _ _.
-Arguments Disj_lower _ [Pj_A][DA] _ _ _.
+Arguments Disj_lower _ [Pj_A][PA_A][psa_A][DA] _ _ _.
 
 Existing Instance Join_lower.  (* Must not be inside a Section *)
 Existing Instance Perm_lower.
@@ -392,9 +398,9 @@ Section FinitePartialMap.
     destruct H as [l Hl].
     exists l.
     intros a Hl'.
-    spec Hl a Hl'.
+    specialize ( Hl a Hl').
     red in H0.
-    spec H0 a.
+    specialize ( H0 a).
     rewrite Hl in H0. inv H0; auto.
   Qed.
 
@@ -406,7 +412,7 @@ Section FinitePartialMap.
     destruct H1 as [l1 H1].
     exists (l0 ++ l1).
     intros.
-    spec H a. spec H0 a. spec H1 a.
+    specialize ( H a). specialize ( H0 a). specialize ( H1 a).
     rewrite H0 in H. rewrite H1 in H. inv H; auto.
     intro contr. apply H2. apply in_or_app; auto.
     intro contr. apply H2. apply in_or_app; auto.
@@ -449,7 +455,7 @@ Section FinitePartialMap.
   Qed.
 
   Instance Disj_fpm {DA_B: Disj_alg B}: Disj_alg fpm.
-  Proof. repeat intro. apply (join_self H). Qed.
+  Proof. repeat intro. apply (join_self H); auto. Qed.
 
   Definition lookup_fpm (f:fpm) : A -> Rng := proj1_sig f.
 

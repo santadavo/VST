@@ -1,5 +1,5 @@
-Require Import floyd.base2.
-Require Import floyd.client_lemmas.
+Require Import VST.floyd.base2.
+Require Import VST.floyd.client_lemmas.
 Import ListNotations.
 
 (* In any of these functions, whenever there is a [list ident],
@@ -133,7 +133,8 @@ Fixpoint deadvars_stmt (vl: list ident) (live dead: list ident) (c: statement)
             let live'' := deadvars_union live1 live2 in
             let dead'' := deadvars_intersection dead1 dead2 in
             let (vl'',live3) := deadvars_delete live'' vl' live' in
-            cont vl'' live3 dead''
+            let (vl3, _) := deadvars_delete dead'' vl'' nil in
+            cont vl3 live3 dead''
      else
            let (vl', live')  := deadvars_removel [e] vl live in
             let (live1,dead1) := deadvars_stmt vl' live' dead c1 cont bcont in
@@ -207,8 +208,9 @@ Ltac locals_of_assert P :=
  | emp => constr:(@nil ident)
  | andp ?A ?B => let a := locals_of_assert A in
                   let b := locals_of_assert B in
-                    constr:(a++b)
- | local (`(eq _) (eval_expr ?E)) =>
+                  constr:(a++b)
+ | stackframe_of _ => constr:(@nil ident)
+ | local (liftx (eq _) (eval_expr ?E)) =>
             let vl := constr:(expr_temps E nil) in vl
  | @exp _ _ ?T ?F =>
     let x := inhabited_value T in
@@ -248,7 +250,6 @@ Ltac find_dead_vars P c Q :=
                                      (deadvars_post (snd post)))) in
       let d := eval compute in d in
       d.
- 
 
 Ltac deadvars := 
  match goal with
@@ -258,7 +259,7 @@ Ltac deadvars :=
     match find_dead_vars P c Q with
     | nil => idtac
     | ?d =>  idtac "Dropping dead vars!"; drop_LOCALs d
-     end
+     end + fail 99 "deadvars failed for an unknown reason"
  | |- semax _ _ _ _ => 
        fail "deadvars: Postcondition must be an abbreviated local definition (POSTCONDITION); try abbreviate_semax first"
  | |- _ |-- _ => idtac
@@ -271,13 +272,11 @@ Tactic Notation "deadvars" "!" :=
     semax _ ?P ?c ?Y =>
     constr_eq X Y;
     match find_dead_vars P c Q with
-    | nil => fail "deadvars!: Did not find any dead variables"
+    | nil => fail 2 "deadvars!: Did not find any dead variables"
     | ?d =>  drop_LOCALs d
      end
  | |- semax _ _ _ _ => 
-       fail "deadvars!: Postcondition must be an abbreviated local definition (POSTCONDITION); try abbreviate_semax first"
- | |- _ => fail "deadvars!: the proof goal should be a semax"
+       fail 1 "deadvars!: Postcondition must be an abbreviated local definition (POSTCONDITION); try abbreviate_semax first"
+ | |- _ => fail 1 "deadvars!: the proof goal should be a semax"
  end.
-  
-   
 

@@ -1,8 +1,8 @@
 (* This file is developed by Qinxiang Cao, Aquinas Hobor and Shengyi Wang in 2015. *)
 
-Require Export veric.base.
-Require Import veric.tycontext.
-Require Import veric.expr2.
+Require Import VST.veric.base.
+Require Import VST.veric.val_lemmas.
+Require Import VST.veric.Memory.
 
 Lemma range_overlap_spec: forall l1 n1 l2 n2,
   n1 > 0 ->
@@ -63,11 +63,12 @@ Proof.
     inversion HH].
   destruct (zlt 0 n1); [| right; intros [[? ?] [[? ?] [_ [_ HH]]]]; apply range_overlap_non_zero in HH; omega].
   destruct (zlt 0 n2); [| right; intros [[? ?] [[? ?] [_ [_ HH]]]]; apply range_overlap_non_zero in HH; omega].
-  destruct (Clight_lemmas.block_eq_dec b b0).
+  destruct (eq_block b b0).
+  (*destruct (Clight_lemmas.block_eq_dec b b0).*)
   + subst b0.
     unfold val2adr.
-    forget (Int.unsigned i) as i1;
-    forget (Int.unsigned i0) as i2;
+    forget (Ptrofs.unsigned i) as i1;
+    forget (Ptrofs.unsigned i0) as i2;
     clear i i0.
     destruct (range_dec i1 i2 (i1 + n1)); [| destruct (range_dec i2 i1 (i2 + n2))].
     - left.
@@ -101,7 +102,7 @@ Lemma pointer_range_overlap_refl: forall p n1 n2,
 Proof.
   intros.
   destruct p; try inversion H.
-  exists (b, Int.unsigned i), (b, Int.unsigned i).
+  exists (b, Ptrofs.unsigned i), (b, Ptrofs.unsigned i).
   repeat split; auto.
   apply range_overlap_spec; auto.
   left.
@@ -115,13 +116,12 @@ Lemma pointer_range_overlap_comm: forall p1 n1 p2 n2,
 Proof.
   cut (forall p1 n1 p2 n2,
          pointer_range_overlap p1 n1 p2 n2 ->
-         pointer_range_overlap p2 n2 p1 n1).
-  Focus 1. {
+         pointer_range_overlap p2 n2 p1 n1). {
     intros.
     pose proof H p1 n1 p2 n2.
     pose proof H p2 n2 p1 n1.
     tauto.
-  } Unfocus.
+  }
   unfold pointer_range_overlap.
   intros.
   destruct H as [l [l' [? [? ?]]]].

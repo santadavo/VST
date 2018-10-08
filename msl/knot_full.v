@@ -5,8 +5,8 @@
 
 (* Knots with all the bells and whistles *)
 
-Require Import msl.base.
-Require Import msl.ageable.
+Require Import VST.msl.base.
+Require Import VST.msl.ageable.
 
 Local Open Scope nat_scope.
 
@@ -799,11 +799,12 @@ Module KnotFull (TF':TY_FUNCTOR_FULL) : KNOT_FULL with Module TF:=TF'.
       [ |- _ = exist _ ?X _ ] =>
       assert (x0 = X)
     end.
-    Focus 2.
+   2:{
     generalize (approx_obligation_1 (S x)
       (exist (fun p => hered p) x0 h)).
     rewrite <- H0.
     intros. f_equal. apply proof_irr.
+   }
     extensionality.
     destruct x1.
     unfold unstrat in H.

@@ -1,5 +1,5 @@
-Require Import floyd.proofauto.
-Require Import progs.bst.
+Require Import VST.floyd.proofauto.
+Require Import VST.progs.bst.
 
 Instance CompSpecs : compspecs. make_compspecs prog. Defined.
 Definition Vprog : varspecs. mk_varspecs prog. Defined.
@@ -132,7 +132,7 @@ Definition treebox_new_spec :=
   WITH u : unit
   PRE  [  ]
        PROP() LOCAL() SEP ()
-  POST [ (tptr t_struct_tree) ]
+  POST [ tptr (tptr t_struct_tree) ]
     EX v:val,
     PROP()
     LOCAL(temp ret_temp v)
@@ -295,13 +295,6 @@ Qed.
 
 Hint Resolve tree_rep_nullval: saturate_local.
 
-Lemma is_pointer_or_null_force_val_sem_cast_neutral: forall p,
-  is_pointer_or_null p -> force_val (sem_cast_neutral p) = p.
-Proof.
-  intros.
-  destruct p; try contradiction; reflexivity.
-Qed.
-
 Lemma treebox_rep_leaf: forall x p b (v: val),
   is_pointer_or_null v ->
   Int.min_signed <= x <= Int.max_signed ->
@@ -405,8 +398,8 @@ Proof.
     forward_if.
     + (* then clause *)
       subst p1.
-      forward_call (sizeof t_struct_tree).
-        1: simpl; repable_signed.
+      Time forward_call (sizeof t_struct_tree).
+        1: simpl; rep_omega.
       Intros p'.
       rewrite memory_block_data_at_ by auto.
       forward. (* p->key=x; *)
@@ -417,7 +410,6 @@ Proof.
       assert_PROP (t1= (@E _)).
         1: entailer!.
       subst t1. simpl tree_rep. rewrite !prop_true_andp by auto.
-      rewrite is_pointer_or_null_force_val_sem_cast_neutral by auto.
       forward. (* *t = p; *)
       forward. (* return; *)
       apply modus_ponens_wand'.
@@ -457,7 +449,7 @@ Proof.
         apply bst_right_entail; auto.
       - (* Inner if, third branch: x=k *)
         assert (x=k) by omega.
-        subst x. clear H H1 H4.
+        subst x.  clear H H1 H3.
         forward. (* p->value=value *)
         forward. (* return *)
         (* TODO: SIMPLY THIS LINE *)
@@ -519,7 +511,7 @@ Proof.
         apply -> wand_sepcon_adjoint.
         Exists pa pb; entailer!.
     + (* else-else clause: x=y *)
-      assert (x=k) by omega. subst x. clear H H4 H5.
+      assert (x=k) by omega. subst x. clear H H3 H4.
       forward. (* v=p->value *)
       forward. (* return v; *)
       unfold treebox_rep. unfold normal_ret_assert.
@@ -542,14 +534,8 @@ Proof.
   Intros pb pc.
   forward. (* mid=r->left *)
   forward. (* l->right=mid *)
-  assert_PROP (is_pointer_or_null pb) by entailer!.
-  rewrite is_pointer_or_null_force_val_sem_cast_neutral by auto.
   forward. (* r->left=l *)
-  assert_PROP (is_pointer_or_null l) by entailer!.
-  rewrite is_pointer_or_null_force_val_sem_cast_neutral by auto.
   forward. (* _l = r *)
-  assert_PROP (is_pointer_or_null r) by entailer!.
-  rewrite is_pointer_or_null_force_val_sem_cast_neutral by auto.
   Opaque tree_rep. forward. Transparent tree_rep. (* return *)
   (* TODO: simplify the following proof *)
   Exists pc.
@@ -600,19 +586,19 @@ Proof.
       subst.
       forward. (* q=p->left *)
       forward. (* *t=q *)
-      forward_call (p0, sizeof t_struct_tree). (* freeN(p, sizeof ( *p )); *)
-      Focus 1. {
+      Time forward_call (p0, sizeof t_struct_tree). (* freeN(p, sizeof ( *p )); *)
+      {
         entailer!.
         rewrite memory_block_data_at_ by auto.
         cancel.
-      } Unfocus.
+      }
       forward. (* return *)
       apply modus_ponens_wand'.
       Exists pa.
       cancel.
     - destruct tbc0 as [| tb0 y vy tc0].
         { simpl tree_rep. normalize. }
-      forward_call (ta0, x, vx, tb0, y, vy, tc0, b0, p0, pa, pbc). (* turn_left(t, p, q); *)
+      Time forward_call (ta0, x, vx, tb0, y, vy, tc0, b0, p0, pa, pbc). (* turn_left(t, p, q); *)
       Intros pc.
       forward. (* t = &q->left; *)
       Exists (field_address t_struct_tree [StructField _left] pbc) ta0 x vx tb0.
@@ -622,9 +608,7 @@ Proof.
       apply RAMIF_PLAIN.trans'.
       apply bst_left_entail; auto.
   + forward. (* Sskip *)
-    apply andp_left2.
-    unfold loop2_ret_assert. rewrite prop_true_andp by auto.
-    auto.
+    apply andp_left2; auto.
 Qed.
 
 Definition delete_inv (b0: val) (t0: tree val) (x: Z): environ -> mpred :=
@@ -699,35 +683,34 @@ Proof.
         unfold_data_at 2%nat.
         gather_SEP 3 5.
         replace_SEP 0 (treebox_rep t1_1 (field_address t_struct_tree [StructField _left] p1)).
-        Focus 1. {
+        {
           unfold treebox_rep; entailer!.
           Exists pa.
           rewrite field_at_data_at.
           entailer!.
-        } Unfocus.
+        }
         gather_SEP 4 5.
         replace_SEP 0 (treebox_rep t1_2 (field_address t_struct_tree [StructField _right] p1)).
-        Focus 1. {
+        {
           unfold treebox_rep; entailer!.
           Exists pb.
           rewrite field_at_data_at.
           entailer!.
-        } Unfocus.
-        forward_call (t1_1, k, v, t1_2, b1, p1).
+        }
+        Time forward_call (t1_1, k, v, t1_2, b1, p1).
         forward. (* return *)
         simpl_compb.
         simpl_compb.
         apply modus_ponens_wand'.
         auto.
   * (* After the loop *)
-    forward.
-    unfold loop2_ret_assert. apply andp_left2. normalize. 
+    forward. apply andp_left2; auto. 
 Qed.
 
 Lemma body_treebox_new: semax_body Vprog Gprog f_treebox_new treebox_new_spec.
 Proof.
   start_function.
-  forward_call (sizeof (tptr t_struct_tree)).
+  Time forward_call (sizeof (tptr t_struct_tree)).
   simpl sizeof; computable.
   Intros p.
   rewrite memory_block_data_at_ by auto.
@@ -745,14 +728,14 @@ Proof.
     Intros pa pb.
     forward.
     forward.
-    forward_call (p, sizeof t_struct_tree).
-    Focus 1. {
+    Time forward_call (p, sizeof t_struct_tree).
+    {
       entailer!.
       rewrite memory_block_data_at_ by auto.
       cancel.
-    } Unfocus.
-    forward_call (t1,pa).
-    forward_call (t2,pb).
+    }
+    Time forward_call (t1,pa).
+    Time forward_call (t2,pb).
     entailer!.
   + forward.
     subst.
@@ -767,11 +750,197 @@ Proof.
   unfold treebox_rep.
   Intros p.
   forward.
-  forward_call (t,p).
-  forward_call (b, sizeof (tptr t_struct_tree)).
+  Time forward_call (t,p).
+  Time forward_call (b, sizeof (tptr t_struct_tree)).
   entailer!.
   rewrite memory_block_data_at_ by auto.
   cancel.
   forward.
 Qed.
+
+Module Abstractions.
+(* Demonstration of data abstraction via subsume_funspec. *)
+
+
+(* Definitions of [combine] and [Abs] taken from 
+   Verified Functional Algorithms (Software Foundations Volume 3),
+   chapter SearchTree *)
+Section TREE_ABS.
+
+Definition total_map (A:Type) := key -> A.
+Definition t_empty {A:Type} (v : A) : total_map A :=
+  (fun _ => v).
+Definition t_update {A:Type} (m : total_map A)
+                    (x : key) (v : A) :=
+  fun x' => if x =? x' then v else m x'.
+
+
+Definition combine {A} (pivot: key) (m1 m2: total_map A) : total_map A :=
+  fun x : key => if zlt x pivot  then m1 x else m2 x.
+
+Inductive Abs:  tree val -> total_map val -> Prop :=
+| Abs_E: Abs E (t_empty nullval)
+| Abs_T: forall a b l k v r,
+      Abs l a ->
+      Abs r b ->
+      Abs (T l k v r)  (t_update (combine k a b) k v).
+
+Theorem insert_relate:
+ forall k v t cts,
+    Abs t cts ->
+    Abs (insert k v t) (t_update cts k v).
+Admitted.  (* This is an exercise in Verified Functional Algorithms *)
+
+Theorem lookup_relate:
+  forall k t cts ,
+    Abs t cts -> lookup nullval k t =  cts k.
+Admitted.  (* This is an exercise in Verified Functional Algorithms *)
+
+
+Definition tmap_rep (m: total_map val) (p: val) : mpred :=
+   EX t: tree val, !! Abs t m && treebox_rep t p.
+
+Definition abs_insert_spec :=
+ DECLARE _insert
+  WITH b: val, x: Z, v: val, m: total_map val
+  PRE  [ _t OF (tptr (tptr t_struct_tree)), _x OF tint,
+        _value OF (tptr Tvoid)   ]
+    PROP( Int.min_signed <= x <= Int.max_signed; is_pointer_or_null v)
+    LOCAL(temp _t b; temp _x (Vint (Int.repr x)); temp _value v)
+    SEP (tmap_rep m b)
+  POST [ Tvoid ] 
+    PROP()
+    LOCAL()
+    SEP (tmap_rep (t_update m x v) b).
+
+Definition abs_treebox_new_spec :=
+ DECLARE _treebox_new
+  WITH u : unit
+  PRE  [  ]
+       PROP() LOCAL() SEP ()
+  POST [ tptr (tptr t_struct_tree) ]
+    EX v:val,
+    PROP()
+    LOCAL(temp ret_temp v)
+    SEP (tmap_rep (t_empty nullval) v).
+
+Definition abs_treebox_free_spec :=
+ DECLARE _treebox_free
+  WITH m: total_map val, p: val
+  PRE  [ _b OF (tptr (tptr t_struct_tree)) ]
+       PROP() LOCAL(temp _b p) SEP (tmap_rep m p)
+  POST [ Tvoid ]
+    PROP()
+    LOCAL()
+    SEP (emp).
+
+Definition main_spec :=
+ DECLARE _main
+  WITH gv : globals
+  PRE  [] main_pre prog nil gv
+  POST [ tint ] main_post prog nil gv.
+
+Lemma subsume_insert:
+ subsume_funspec (snd insert_spec) (snd abs_insert_spec).
+Proof.
+apply NDsubsume_subsume.
+split; reflexivity.
+split3; auto.
+intros [[[b x] v] m].
+unfold tmap_rep.
+Intros t.
+Exists (b, x, v, t).
+Exists emp.
+change (`emp) with (@emp (environ->mpred) _ _); rewrite !emp_sepcon.
+apply andp_right; auto.
+entailer!.
+apply prop_right.
+simplify_Delta.
+Exists (insert x v t).
+entailer!.
+apply insert_relate; auto.
+Qed.
+
+Lemma subsume_treebox_new:
+ subsume_funspec (snd treebox_new_spec) (snd abs_treebox_new_spec).
+Proof.
+apply NDsubsume_subsume.
+split; reflexivity.
+split3; auto.
+intros x. simpl in x.
+Exists x.
+Exists emp.
+change (`emp) with (@emp (environ->mpred) _ _); rewrite !emp_sepcon.
+apply andp_right; auto.
+apply prop_right.
+simplify_Delta.
+Intros v.
+Exists v.
+unfold tmap_rep.
+Exists (empty_tree val).
+unfold treebox_rep.
+Exists nullval.
+entailer!.
+constructor.
+Qed.
+
+Lemma subsume_treebox_free:
+ subsume_funspec (snd treebox_free_spec) (snd abs_treebox_free_spec).
+Proof.
+apply NDsubsume_subsume.
+split; reflexivity.
+split3; auto.
+intros [m p].
+unfold tmap_rep.
+Intros t.
+Exists (t,p).
+Exists emp.
+change (`emp) with (@emp (environ->mpred) _ _); rewrite !emp_sepcon.
+apply andp_right; auto.
+apply prop_right.
+simplify_Delta.
+entailer!.
+Qed.
+
+Lemma body_main: semax_body Vprog Gprog f_main main_spec.
+Proof.
+start_function.
+assert_PROP (isptr (gv ___stringlit_1)) by entailer!.
+assert_PROP (isptr (gv ___stringlit_2)) by entailer!.
+assert_PROP (isptr (gv ___stringlit_3)) by entailer!.
+assert_PROP (isptr (gv ___stringlit_4)) by entailer!.
+freeze [0;1;2;3] FR1.
+forward_call subsume_treebox_new tt.
+Intros p.
+forward_call subsume_insert (p, 3, gv ___stringlit_1, t_empty nullval).
+split. computable. auto.
+forward_call subsume_insert (p, 1, gv ___stringlit_2, (t_update (t_empty nullval) 3 (gv ___stringlit_1))).
+split. computable. auto.
+forward_call subsume_insert (p, 4, gv ___stringlit_3, (t_update
+             (t_update (t_empty nullval) 3
+                (gv ___stringlit_1)) 1 (gv ___stringlit_2))).
+split. computable. auto.
+forward_call subsume_insert (p, 1, gv ___stringlit_4, 
+           (t_update
+             (t_update
+                (t_update (t_empty nullval) 3
+                   (gv ___stringlit_1)) 1
+                (gv ___stringlit_2)) 4 (gv ___stringlit_3))).
+split. computable. auto.
+forward_call subsume_treebox_free ((t_update
+             (t_update
+                (t_update
+                   (t_update (t_empty nullval) 3
+                      (gv ___stringlit_1)) 1
+                   (gv ___stringlit_2)) 4
+                (gv ___stringlit_3)) 1 (gv ___stringlit_4)), p).
+forward.
+Qed.
+
+End TREE_ABS.
+
+End Abstractions.
+
+
+
 
