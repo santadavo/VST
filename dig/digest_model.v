@@ -1,4 +1,4 @@
-Require Import Coqlib.
+Require Import compcert.lib.Coqlib.
 Require Import List.
 
 Ltac inv N := inversion N; clear N; subst; try solve [congruence].

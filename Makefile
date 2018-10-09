@@ -35,7 +35,7 @@ ANNOTATE=silent   # suppress chatty output from coqc
 CC_TARGET= $(COMPCERT)/cfrontend/Clight.vo
 CC_DIRS= lib common cfrontend exportclight
 VSTDIRS= msl sepcomp veric floyd progs concurrency ccc26x86 
-OTHERDIRS= wand_demo sha fcf hmacfcf tweetnacl20140427 hmacdrbg aes mailbox atomics
+OTHERDIRS= wand_demo sha fcf hmacfcf tweetnacl20140427 hmacdrbg aes mailbox atomics dig
 DIRS = $(VSTDIRS) $(OTHERDIRS)
 CONCUR = concurrency
 
@@ -367,7 +367,8 @@ TWEETNACL_FILES = \
   verif_verify.v
 
 DIGEST_FILES = \
-  digest.v digests.v digest_model.v spec_digests.v abstractspec_digests.v digestProposal1.v digestsProposal1.v  abstractspec_digestsProposal1.v
+  digest.v digests.v digest_model.v spec_digests.v 
+# abstractspec_digests.v digestProposal1.v digestsProposal1.v  abstractspec_digestsProposal1.v
 
 HMACDRBG_FILES = \
   entropy.v entropy_lemmas.v DRBG_functions.v HMAC_DRBG_algorithms.v \
@@ -415,6 +416,7 @@ FILES = \
  $(WAND_DEMO_FILES:%=wand_demo/%) \
  $(SHA_FILES:%=sha/%) \
  $(HMAC_FILES:%=sha/%) \
+ $(DIGEST_FILES:%=dig/%) \
  $(FCF_FILES:%=fcf/%) \
  $(HMACFCF_FILES:%=hmacfcf/%) \
  $(HMACEQUIV_FILES:%=sha/%) \
@@ -511,6 +513,7 @@ progs:   _CoqProject $(PROGS_FILES:%.v=progs/%.vo)
 wand_demo:   _CoqProject $(WAND_DEMO_FILES:%.v=wand_demo/%.vo)
 sha:     _CoqProject $(SHA_FILES:%.v=sha/%.vo)
 hmac:    _CoqProject $(HMAC_FILES:%.v=sha/%.vo)
+digest:    _CoqProject $(DIGEST_FILES:%.v=dig/%.vo)
 hmacequiv:    _CoqProject $(HMAC_FILES:%.v=sha/%.vo)
 fcf:     _CoqProject $(FCF_FILES:%.v=fcf/%.vo)
 hmacfcf: _CoqProject $(HMACFCF_FILES:%.v=hmacfcf/%.vo)
@@ -550,6 +553,8 @@ progs/even.v: progs/even.c progs/odd.c
 	$(CLIGHTGEN) ${CGFLAGS} $^
 progs/odd.v: progs/even.v
 mailbox/mailbox.v: mailbox/atomic_exchange.c mailbox/mailbox.c
+	$(CLIGHTGEN) ${CGFLAGS} $^
+dig/digest.v dig/digests.v: dig/digest.c dig/digests.c
 	$(CLIGHTGEN) ${CGFLAGS} $^
 # GENERAL RULES FOR SINGLE_C_FILES and NORMAL_C_FILES
 $(patsubst %.c,progs/%.v, $(SINGLE_C_FILES)): progs/%.v: progs/%.c
