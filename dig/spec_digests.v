@@ -166,17 +166,18 @@ Definition EVP_MD_block_size_SPEC := DECLARE _EVP_MD_block_size
        LOCAL (temp ret_temp (Vint (Int.repr (EVP_MD_rec_block_size R))))
        SEP (EVP_MD_rep R md).
 
-Definition Gprog_EVPMD : funspecs :=
-  (*FAILS TO TERMINATE: ltac:(with_library prog [EVP_MD_type_SPEC]). *)
-  [EVP_MD_type_SPEC; EVP_MD_flags_SPEC; EVP_MD_size_SPEC; EVP_MD_block_size_SPEC].
+Definition Gprog_EVPMD : funspecs := []. (*
+  ltac:(with_library prog [EVP_MD_type_SPEC; EVP_MD_flags_SPEC; EVP_MD_size_SPEC; EVP_MD_block_size_SPEC]).*)
 
+Ltac destruct_vals vals X :=
+   destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]];
+  simpl in type, mds, flags, ini, upd, fin, blsize, ctxsize, X; subst; simpl.
 
 Lemma body_EVP_MD_type: semax_body Vprog Gprog_EVPMD f_EVP_MD_type EVP_MD_type_SPEC. 
 Proof.
   start_function.
-  unfold EVP_MD_rep. Intros sh vals; rename H into Rsh. 
-  destruct vals as (type, (mdsize, (flags, (ini, (upd, (fin, (blocksize, ctxsize))))))).
-  simpl in type, mdsize, flags, ini, upd, fin, blocksize, ctxsize; simpl.
+  unfold EVP_MD_rep. Intros sh vals; rename H into Rsh.
+  destruct_vals vals Rsh.
   Intros. forward. forward.  
   Exists sh (Vint (Int.repr (NID_of_DigestNID (EVP_MD_rec_type R))),
        (Vint (Int.repr (EVP_MD_rec_md_size R)),
@@ -193,8 +194,7 @@ Lemma body_EVP_MD_flags: semax_body Vprog Gprog_EVPMD f_EVP_MD_flags EVP_MD_flag
 Proof.
   start_function.
   unfold EVP_MD_rep. Intros sh vals; rename H into Rsh.
-  destruct vals as (type, (mdsize, (flags, (ini, (upd, (fin, (blocksize, ctxsize))))))).
-  simpl in type, mdsize, flags, ini, upd, fin, blocksize, ctxsize; simpl.
+  destruct_vals vals Rsh.
   Intros. forward. forward.  
   Exists sh (Vint (Int.repr (NID_of_DigestNID (EVP_MD_rec_type R))),
        (Vint (Int.repr (EVP_MD_rec_md_size R)),
@@ -205,14 +205,13 @@ Proof.
        (Vint (Int.repr (EVP_MD_rec_block_size R)),
        Vint (Int.repr (EVP_MD_rec_ctx_size R))))))))). 
   simpl. entailer!.
-Qed. 
+Qed.
 
 Lemma body_EVP_MD_size: semax_body Vprog Gprog_EVPMD f_EVP_MD_size EVP_MD_size_SPEC. 
 Proof.
-  start_function.  
+  start_function.
   unfold EVP_MD_rep. Intros sh vals; rename H into Rsh. 
-  destruct vals as (type, (mdsize, (flags, (ini, (upd, (fin, (blocksize, ctxsize))))))).
-  simpl in type, mdsize, flags, ini, upd, fin, blocksize, ctxsize; simpl.
+  destruct_vals vals Rsh.
   Intros. forward. forward.  
   Exists sh (Vint (Int.repr (NID_of_DigestNID (EVP_MD_rec_type R))),
        (Vint (Int.repr (EVP_MD_rec_md_size R)),
@@ -228,9 +227,8 @@ Qed.
 Lemma body_EVP_MD_block_size: semax_body Vprog Gprog_EVPMD f_EVP_MD_block_size EVP_MD_block_size_SPEC. 
 Proof.
   start_function.  
-  unfold EVP_MD_rep. Intros sh vals; rename H into Rsh. 
-  destruct vals as (type, (mdsize, (flags, (ini, (upd, (fin, (blocksize, ctxsize))))))).
-  simpl in type, mdsize, flags, ini, upd, fin, blocksize, ctxsize; simpl.
+  unfold EVP_MD_rep. Intros sh vals; rename H into Rsh.
+  destruct_vals vals Rsh.
   Intros. forward. forward.  
   Exists sh (Vint (Int.repr (NID_of_DigestNID (EVP_MD_rec_type R))),
        (Vint (Int.repr (EVP_MD_rec_md_size R)),
@@ -373,9 +371,7 @@ Definition EVP_add_digest_SPEC := DECLARE _EVP_add_digest
       PROP () LOCAL (temp _digest v) SEP ()
   POST [tint] PROP () LOCAL (temp ret_temp (Vint Int.one)) SEP ().
 
-Definition Gprog_EVP_add_digest : funspecs :=
-  (*FAILS TO TERMINATE: ltac:(with_library prog [EVP_MD_type_SPEC]). *)
-  [].
+Definition Gprog_EVP_add_digest : funspecs := [].
 
 Lemma body_EVP_add_digest: semax_body Vprog Gprog_EVP_add_digest
                            f_EVP_add_digest EVP_add_digest_SPEC.
@@ -414,7 +410,7 @@ Definition EVP_MD_CTX_create_SPEC := DECLARE _EVP_MD_CTX_create
        SEP ((!!(ctx=nullval) && emp) || data_at_ Tsh (tarray tuchar (sizeof (Tstruct _env_md_ctx_st noattr))) ctx).
 
 Definition Gprog_EVPMDCTX_1 : funspecs :=
-  (*FAILS TO TERMINATE: ltac:(with_library prog [EVP_MD_type_SPEC]). *)
+  (*FAILS: ltac:(with_library prog [EVP_MD_CTX_create_SPEC; EVP_MD_CTX_init_SPEC; OPENSSL_memset_SPEC; OPENSSL_malloc_SPEC])*)
   [EVP_MD_CTX_create_SPEC; EVP_MD_CTX_init_SPEC; OPENSSL_memset_SPEC; OPENSSL_malloc_SPEC].
 
 Lemma body_EVP_MD_CTX_init: semax_body Vprog Gprog_EVPMDCTX_1 f_EVP_MD_CTX_init EVP_MD_CTX_init_SPEC.
@@ -511,7 +507,7 @@ Definition EVP_MD_CTX_size_SPEC := DECLARE _EVP_MD_CTX_size
       PROP (readable_share sh)
       LOCAL (temp _ctx ctx)
       SEP (EVP_MD_CTX_NNnode sh (d, x) ctx;  EVP_MD_rep r d)
-  POST [ tptr (Tstruct _env_md_st noattr) ]
+  POST [ tuint ]
        PROP (readable_share sh)
        LOCAL (temp ret_temp (Vint (Int.repr (EVP_MD_rec_md_size r))))
        SEP (EVP_MD_CTX_NNnode sh (d, x) ctx;  EVP_MD_rep r d).
@@ -522,7 +518,7 @@ Definition EVP_MD_CTX_block_size_SPEC := DECLARE _EVP_MD_CTX_block_size
       PROP (readable_share sh)
       LOCAL (temp _ctx ctx)
       SEP (EVP_MD_CTX_NNnode sh (d, x) ctx;  EVP_MD_rep r d)
-  POST [ tptr (Tstruct _env_md_st noattr) ]
+  POST [ tuint ]
        PROP (readable_share sh)
        LOCAL (temp ret_temp (Vint (Int.repr (EVP_MD_rec_block_size r))))
        SEP (EVP_MD_CTX_NNnode sh (d, x) ctx;  EVP_MD_rep r d).
@@ -533,20 +529,21 @@ Definition EVP_MD_CTX_type_SPEC := DECLARE _EVP_MD_CTX_type
       PROP (readable_share sh)
       LOCAL (temp _ctx ctx)
       SEP (EVP_MD_CTX_NNnode sh (d, x) ctx;  EVP_MD_rep r d)
-  POST [ tptr (Tstruct _env_md_st noattr) ]
+  POST [ tint ]
        PROP ()
        LOCAL (temp ret_temp (Vint (Int.repr (NID_of_DigestNID (EVP_MD_rec_type r)))))
        SEP (EVP_MD_CTX_NNnode sh (d, x) ctx;  EVP_MD_rep r d).
 
 Definition Gprog_DigAccessOps : funspecs :=
-  (*FAILS TO TERMINATE: ltac:(with_library prog [EVP_MD_type_SPEC]). *)
-  [EVP_MD_block_size_SPEC; EVP_MD_type_SPEC; EVP_MD_size_SPEC  (*called*);
-   EVP_MD_CTX_md_SPEC; EVP_MD_CTX_size_SPEC; EVP_MD_CTX_block_size_SPEC; EVP_MD_CTX_type_SPEC].
+  ltac:(with_library prog [EVP_MD_block_size_SPEC; EVP_MD_type_SPEC; EVP_MD_size_SPEC  (*called*);
+   EVP_MD_CTX_md_SPEC; EVP_MD_CTX_size_SPEC; EVP_MD_CTX_block_size_SPEC; EVP_MD_CTX_type_SPEC] ).
+(*  [EVP_MD_block_size_SPEC; EVP_MD_type_SPEC; EVP_MD_size_SPEC  (*called*);
+   EVP_MD_CTX_md_SPEC; EVP_MD_CTX_size_SPEC; EVP_MD_CTX_block_size_SPEC; EVP_MD_CTX_type_SPEC].*)
 
 Lemma body_EVP_MD_CTX_block_size: semax_body Vprog Gprog_DigAccessOps f_EVP_MD_CTX_block_size EVP_MD_CTX_block_size_SPEC.
 Proof.
   start_function. 
-  destruct x as [x1 [x2 x3]].
+   destruct x as [x1 [x2 x3]].
   rewrite  EVP_MD_CTX_NNnode_isptr', EVP_MD_CTX_NNnode_props''; Intros.
   forward_call (ctx, sh, d, (x1,(x2,x3))).
     apply sepcon_derives; [apply orp_right2; trivial | cancel].
@@ -585,7 +582,7 @@ Qed.
 Lemma body_EVP_MD_CTX_md: semax_body Vprog Gprog_DigAccessOps f_EVP_MD_CTX_md EVP_MD_CTX_md_SPEC.
 Proof.
   start_function.
- destruct x as [mddata [pctx pctxops]].
+  destruct x as [mddata [pctx pctxops]].
   forward_if (
       PROP ()
       LOCAL (temp _ctx ctx)
@@ -593,11 +590,9 @@ Proof.
 + clear H. apply orp_left; [ entailer! | unfold EVP_MD_CTX_NNnode; normalize; entailer!].
 + subst. forward.
 + forward. (*unfold EVP_MD_CTX_NNnode.*) entailer. apply orp_left; normalize. simpl; trivial.
-+ simpl. (*unfold EVP_MD_CTX_NNnode.*) Intros. 
++ simpl. rewrite data_at_isptr; Intros. destruct ctx; try contradiction. clear Pctx. (*unfold EVP_MD_CTX_NNnode.*)
   forward. forward.
-  rewrite data_at_isptr; normalize. 
-  rewrite if_false. 2: destruct ctx; try contradiction; discriminate.
-  normalize. apply orp_right2. simpl. entailer!.
+  apply orp_right2. simpl. entailer!.
 Qed.  
 
 (*nonnull node*)
@@ -678,7 +673,7 @@ Proof.
 Qed. 
 
 Definition Gprog_cleanup : funspecs :=
-  (*FAILS TO TERMINATE: ltac:(with_library prog [EVP_MD_type_SPEC]). *)
+  (*FAILS: ltac:(with_library prog [OPENSSL_cleanse_SPEC; OPENSSL_free_SPEC; EVP_MD_CTX_init_SPEC]). *)
   [OPENSSL_cleanse_SPEC; OPENSSL_free_SPEC; EVP_MD_CTX_init_SPEC].
 
 (*crashes if ctx==null, so require NNode*)
@@ -769,8 +764,8 @@ Proof.
     apply EVP_MD_NNnode_validptr. }
 { clear H. forward. 
   unfold EVP_MD_NNnode; Intros. rename H into Rsh1.
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]; simpl in *. subst.
-  forward. forward. entailer!. simpl. rewrite CTXsizeNonzero; trivial. 
+  destruct_vals vals CTXsize.
+  forward. forward. entailer!. rewrite CTXsizeNonzero; trivial. 
   unfold EVP_MD_NNnode. entailer!. }
 { subst; contradiction. }
 
@@ -799,8 +794,8 @@ forward_if
    SEP (data_at sh (Tstruct _env_md_ctx_st noattr) (d, (mdd, (pv1, nullval))) ctx; EVP_MD_NNnode dsh vals d)).
 + clear H H'. forward. forward.
   unfold EVP_MD_NNnode; Intros. rename H into Rsh1.
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]].
-  simpl in type, mds, flags, ini, upd, fin, blsize, ctxsize, CTXsize.
+  destruct_vals vals CTXsize.
+
   forward.
   forward_call (mdd,  Tsh, Int.unsigned ctxsz).
   { simpl. rewrite Int.repr_unsigned. entailer!. }
@@ -824,7 +819,7 @@ forward_if
   { clear H. forward. entailer!. }
   forward_call (ctx, sh, sizeof (Tstruct _env_md_ctx_st noattr)).
   forward. cancel.
-Time Qed. (*Slow 25s*)
+Qed.
 
 (*Case 3:unify*)
 Definition EVP_MD_CTX_cleanup_SPEC3 := DECLARE _EVP_MD_CTX_cleanup
@@ -899,8 +894,8 @@ forward_if
   apply EVP_MD_NNnode_validptr. }
 { clear H. forward. 
   unfold EVP_MD_NNnode; Intros. rename H into Rsh1.
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]; simpl in *. subst.
-  forward. forward. entailer!. simpl. rewrite CTXsizeNonzero; trivial.
+  destruct_vals vals CTXsize.
+  forward. forward. rewrite CTXsizeNonzero. entailer!.
   unfold EVP_MD_NNnode. entailer!. }
 { subst; contradiction. }
 apply semax_orp_SEPx; Intros; subst.
@@ -958,8 +953,8 @@ forward_if (PROP ( )
    data_at dsh (Tstruct _env_md_st noattr) vals (Vptr b i);
    data_at sh (Tstruct _env_md_ctx_st noattr)
      (Vptr b i, (Vptr b0 i0, (pv1, nullval))) ctx)).
-{ clear H. forward. forward. 
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]; simpl in *. subst.
+{ clear H H'. forward. forward.
+  destruct_vals vals CTXsize.
   forward. 
   forward_call (Vptr b0 i0, Tsh, Int.unsigned ctxsz).
   { simpl. rewrite Int.repr_unsigned; entailer!. }
@@ -1077,9 +1072,9 @@ destruct other as [ _ | [[dsh d] vals]].
     apply EVP_MD_NNnode_validptr. }
   { clear H. forward. 
     unfold EVP_MD_NNnode; Intros. rename H into Rsh1.
-    destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]; simpl in *. subst.
-    destruct d; try contradiction.
-    forward. forward. entailer!. simpl. rewrite ctxszH2; trivial.
+    destruct_vals vals ctxszH1.
+    destruct d; try contradiction; clear Pd.
+    forward. forward. rewrite ctxszH2; entailer!.
     unfold EVP_MD_NNnode; entailer!. }
   { subst; contradiction. }
   apply semax_orp_SEPx; Intros; subst.
@@ -1129,8 +1124,8 @@ destruct other as [ _ | [[dsh d] vals]].
      LOCAL (temp _t'2 (Vint Int.one); temp _ctx ctx)
      SEP (data_at dsh (Tstruct _env_md_st noattr) vals (Vptr b i);
           data_at sh (Tstruct _env_md_ctx_st noattr) (Vptr b i, (Vptr b0 i0, (pv1, nullval))) ctx)).
-    { clear H. forward. forward. 
-      destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]; simpl in *. subst.
+    { clear H H'. forward. forward.
+      destruct_vals vals ctxszH1.
       forward. 
       forward_call (Vptr b0 i0, Tsh, Int.unsigned ctxsz).
       { simpl. rewrite Int.repr_unsigned; entailer!. }
@@ -1325,8 +1320,7 @@ Lemma body_DigestUpdate: semax_body Vprog Gprog_DigestUpdate f_EVP_DigestUpdate 
 Proof. 
   start_function. unfold EVP_MD_NNnode; Intros.
   destruct CTX as [d [md [pv1 pv2]]]. simpl in d, md, pv1, pv2; simpl. forward.
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]].
-  simpl in type, mds, flags, ini, upd, fin, blsize, ctxsize; simpl. forward.
+  destruct_vals vals SH. forward.
   freeze [3] FR1. 
   Time forward_call (ctx, sh, (d, (md, (pv1, pv2))), 
                 data, dsh, Data, sz, len). (*44s*)
@@ -1345,7 +1339,6 @@ Qed.
  
 Lemma postFin_pTN sh n md: postFin sh n md |-- !!(is_pointer_or_null md).
 Proof. eapply derives_trans. apply postFin_memory_block. entailer!. Qed.
-
 
 Parameter Finresult: list val -> val -> mpred.
 Definition fin_spec:funspec :=
@@ -1403,8 +1396,7 @@ Proof.
   start_function. unfold EVP_MD_NNnode; Intros. rename H into CTXSZ1.
   rename H0 into MDSZ. rename H1 into CTXSZ2. 
   destruct CTX as [d [md [pv1 pv2]]]; simpl in d, md, pv1, pv2; simpl. forward.
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]];
-  simpl in type, mds, flags, ini, upd, fin, blsize, ctxsize; simpl. simpl in CTXSZ1, MDSZ; subst.
+  destruct_vals vals CTXSZ1. simpl in MDSZ; subst mds.
   forward. 
   forward_call (ctx, sh, (d, (md, (pv1, pv2))), 
                 out, osh, content, dsh, Int.unsigned ctxsz, Int.unsigned mdsize).
@@ -1624,11 +1616,9 @@ Proof.
   - apply ptr_comp_Cne_t in H; congruence.
   - forward. entailer!.
   - forward. thaw FUNCS. 
-    destruct tvals as [type' [mds' [flags' [ini' [upd' [fin' [blsize' ctxsize'']]]]]]]. 
-    simpl in type', mds', flags', ini', upd', fin', ctxsize'', blsize', CTXSZ1', CTXSZ2', Ini'; subst.
-    simpl. forward. 
-    forward_call (ctx, sh, (t, (md, (nullval, pv2))), tsh, 
-                   (type', (mds', (flags', (ini', (upd', (fin', (blsize', Vint ctxsz'))))))), ctxsz').
+    destruct_vals tvals CTXSZ1'. simpl in Ini'.
+    forward. 
+    forward_call (ctx, sh, (t, (md, (nullval, pv2))), tsh, (type, (mds, (flags, (ini, (upd, (fin, (blsize, Vint ctxsz'))))))), ctxsz').
     { simpl. cancel. } 
     simpl; forward. Exists (Vint (Int.one)); unfold EVP_MD_NNnode; entailer!.
 
@@ -1672,9 +1662,8 @@ Proof.
            data_at sh (Tstruct _env_md_ctx_st noattr) (nullval, (md, (nullval, pv2))) ctx;
            data_at tsh (Tstruct _env_md_st noattr) tvals t));
      [ elim H; trivial | forward; entailer! | ].
-    forward. simpl.
-    destruct tvals as [type' [mds' [flags' [ini' [upd' [fin' [blsize' ctxsize'']]]]]]]. 
-    simpl in type', mds', flags', ini', upd', fin', ctxsize'', blsize', CTXSZ1', CTXSZ2', Ini'; subst; simpl.
+    forward.
+    destruct_vals tvals CTXSZ1'. simpl in Ini'.
 (*    rewrite eval_cast_neutral_isptr; trivial; simpl.*)
     forward. 
     forward_if (
@@ -1683,7 +1672,7 @@ Proof.
              temp _ctx ctx; temp _engine e)
       SEP (ERRGV gv; (*ERR ep;*) FRZL FUNCS; 
            data_at tsh (Tstruct _env_md_st noattr)
-              (type', (mds', (flags', (ini', (upd', (fin', (blsize', Vint ctxsz'))))))) t;
+              (type, (mds, (flags, (ini, (upd, (fin, (blsize, Vint ctxsz'))))))) t;
            (*( !!(Int.unsigned ctxsz' <= 0)
              && data_at sh (Tstruct _env_md_ctx_st noattr) (t, (md, (nullval, pv2))) ctx)
            || *)(!!(0 < Int.unsigned ctxsz')
@@ -1718,7 +1707,7 @@ Proof.
                ERRGV gv; (*ERR ep;*) FRZL FUNCS; 
                data_at sh (Tstruct _env_md_ctx_st noattr) (t, (m, (nullval, pv2))) ctx;
                data_at tsh (Tstruct _env_md_st noattr)
-                 (type', (mds', (flags', (ini', (upd', (fin', (blsize', Vint ctxsz'))))))) t)).
+                  	(type, (mds, (flags, (ini, (upd, (fin, (blsize, Vint ctxsz'))))))) t)).
        (* * clear H.
           apply denote_tc_test_eq_split; [ apply sepcon_valid_pointer1 | apply valid_pointer_null].
           apply sepcon_valid_pointer1. apply sepcon_valid_pointer1. apply sepcon_valid_pointer1.
@@ -1733,13 +1722,12 @@ Proof.
     intros. unfold POSTCONDITION, abbreviate, overridePost; clear POSTCONDITION.
     old_go_lower. clear H. destruct ek; simpl; normalize. Exists m; entailer!.*)
   - Intros m. clear H; rename H0 into M. 
-    destruct tvals as [type' [mds' [flags' [ini' [upd' [fin' [blsize' ctxsize'']]]]]]]. 
-    simpl in type', mds', flags', ini', upd', fin', ctxsize'', blsize', CTXSZ1', CTXSZ2', Ini'; subst; simpl.
+    destruct_vals tvals CTXSZ1'. simpl in Ini'.
     forward.
     forward. thaw FUNCS. simpl.
     replace_SEP 4 (preInit (Int.unsigned ctxsz') m). { entailer!. apply preInit_fresh. } 
     forward_call (ctx, sh, (t, (m, (nullval, pv2))), tsh, 
-                   (type', (mds', (flags', (ini', (upd', (fin', (blsize', Vint ctxsz'))))))), ctxsz').
+                    (type, (mds, (flags, (ini, (upd, (fin, (blsize, Vint ctxsz'))))))), ctxsz').
       { simpl. cancel. } 
     simpl; forward. Exists (Vint (Int.one)); unfold EVP_MD_NNnode; entailer!.
     apply orp_right2. Exists m. entailer!.
@@ -1757,10 +1745,9 @@ Proof.
   rewrite data_at_isptr with (p:=ctx); Intros.
   freeze [3] D. freeze [5] MD. 
   forward. thaw MD; thaw D. thaw FUNCS.
-  destruct dvals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]. 
-  simpl in type, mds, flags,ini, upd, fin, ctxsize, blsize, CTXSZ1.
-  destruct tvals as [type' [mds' [flags' [ini' [upd' [fin' [blsize' ctxsize'']]]]]]]. 
-  simpl in type', mds', flags',ini', upd', fin', ctxsize'', blsize', CTXSZ1', CTXSZ2', Ini'; subst; simpl.
+  destruct_vals dvals CTXSZ1.
+  destruct tvals as [type' [mds' [flags' [ini' [upd' [fin' [blsize' ctxsize'']]]]]]];
+  simpl in type', mds', flags', ini', upd', fin', blsize', ctxsize'', CTXSZ1', Ini'; subst; simpl.
   freeze [4] CTX. freeze [1] MD. freeze [3] FUNCS. rewrite data_at_isptr with (p:=t); Intros.
   freeze [0;1;2;4] ALLFR. (* subst dvals tvals; simpl. *) simpl.
   forward_if (
@@ -1868,9 +1855,10 @@ Proof.
       replace_SEP 1 (preInit (Int.unsigned ctxsz') m). { entailer!; apply preInit_fresh. } 
       forward_call (ctx, sh, (t, (m, (nullval, pv2))), tsh, 
                    (type', (mds', (flags', (ini', (upd', (fin', (blsize', Vint ctxsz'))))))), ctxsz').
-      { simpl. cancel. } 
-      simpl; forward. Exists (Vint (Int.one)); unfold EVP_MD_NNnode; entailer!.
-      thaw REST1. cancel. apply orp_right2. Exists m. entailer!. (*normalize.
+      { simpl. cancel. }
+      simpl; forward. (*20s*)
+      Exists (Vint (Int.one)); unfold EVP_MD_NNnode; entailer!.
+      thaw REST1. cancel. apply orp_right2. Exists m. entailer!.   (*normalize.
       apply andp_right; [ apply prop_right; repeat split; trivial | cancel]. *)
 Time Qed. (*66s*)
 
@@ -1898,9 +1886,8 @@ Definition EVP_DigestInit_SPEC := DECLARE _EVP_DigestInit
                   data_at sh (Tstruct _env_md_ctx_st noattr)(t, (m, (nullval, nullval))) ctx)).
 
 Definition Gprog_DigestInit : funspecs :=
-  (*FAILS TO TERMINATE: ltac:(with_library prog [EVP_MD_type_SPEC]). *)
-  [EVP_DigestInit_ex_SPEC; EVP_MD_CTX_init_SPEC].
-
+ltac:(with_library prog [EVP_DigestInit_ex_SPEC; EVP_MD_CTX_init_SPEC]).
+(*  [EVP_DigestInit_ex_SPEC; EVP_MD_CTX_init_SPEC].*)
 
 Lemma body_DigestInit: semax_body Vprog Gprog_DigestInit f_EVP_DigestInit EVP_DigestInit_SPEC.
 Proof. 
@@ -1908,10 +1895,10 @@ Proof.
   assert_PROP (field_compatible (Tstruct _env_md_ctx_st noattr) [] ctx) as FC by entailer!.
   forward_call (ctx, sh, sizeof (Tstruct _env_md_ctx_st noattr)); simpl. 
   replace_SEP 0 (data_at sh (Tstruct _env_md_ctx_st noattr) (nullval, (nullval, (nullval, nullval))) ctx).
-    entailer. apply convert.
+  solve [ entailer; apply convert].
   forward_call ((*ep*)ctx, t, nullval, D_null sh nullval nullval tsh tvals ctxsz', gv).
-  { simpl; entailer!. }
-  Intros rv. simpl. forward. Exists (Vint rv). entailer!.
+  solve [ simpl; entailer! ].
+  Intros rv. forward. Exists (Vint rv). entailer!.
   apply orp_left. 
   - Intros. cancel. apply orp_right1; entailer!.
   - Intros m. cancel. apply orp_right2; entailer!.
@@ -2220,13 +2207,12 @@ Proof.
 + assert_PROP (isptr d) by entailer!.
   replace_SEP 2 (data_at osh (Tstruct _env_md_ctx_st noattr)
       (nullval, (nullval, (nullval, nullval))) octx).
-  { (*holds because of FCout*) entailer. apply convert. }
+  solve [(*holds because of FCout*) entailer!; apply convert].
   (*unfold data_at_, field_at_. simpl. unfold default_val.x simpl. *)
   forward_call (gv, octx, ictx, inDataNull ish d nullval pv2 dsh vals osh nullval nullval nullval).
   { simpl. destruct H1 as [ctxsz [H1a H1b]]. entailer!. simpl. Exists ctxsz. entailer!. }
   Intros v. forward. unfold POST3. 
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]. 
-  simpl in type, mds, flags,ini, upd, fin, ctxsize, blsize.
+  destruct_vals vals H1.
   destruct (Val.eq nullval nullval); [simpl | solve [ congruence ]].
   Intros ctxsz. Exists (Vint v); entailer!.
 + replace_SEP 3 (data_at osh (Tstruct _env_md_ctx_st noattr)
@@ -2407,8 +2393,7 @@ Proof.
   (*line 136: read in->md_data && in->digest->ctx_size*)
   forward. 
   freeze [3] FR1.
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]. 
-  simpl in type, mds, flags,ini, upd, fin, ctxsize, blsize. 
+  destruct_vals vals ISH.
   forward_if (
     PROP ( )
     LOCAL (gvars gv; temp _t'3 nullval; temp _t'20 nullval; temp _t'23 d;
@@ -2512,8 +2497,7 @@ Proof.
 
   forward. 
   freeze [0;2] FR1.
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]. 
-  simpl in type, mds, flags,ini, upd, fin, ctxsize, blsize.
+  destruct_vals vals cxtszH1. 
   deadvars!.
   unfold EVP_MD_NNnode; Intros. 
   destruct d; simpl in Pd; try contradiction. 
@@ -2571,7 +2555,7 @@ Proof.
        + Intros m. forward. forward.
          freeze [1;3;4;5] FR1. focus_SEP 1.
          apply semax_orp_SEPx.
-         - simpl in  cxtszH1; subst. normalize.
+         - Intros; subst m.
            forward_if (PROP (False) LOCAL () SEP ()). 
            * clear H H'.
              forward_call (Vint (Int.repr 29), Vint (Int.repr 0), Vint (Int.or (Int.repr 1) (Int.repr 64)),
@@ -2640,7 +2624,7 @@ Proof.
          data_at ish (Tstruct _env_md_ctx_st noattr) (Vptr b i, (md, (nullval, pv2))) ictx)). 
      { elim H; trivial. }
      { forward; entailer!. }
-  simpl in cxtszH1; subst. forward. Exists (Vint Int.one); entailer!.
+  forward. Exists (Vint Int.one); entailer!.
   apply orp_right2. Exists m. entailer!.
 
 + (*Case 5: equalDigests_outDataPtr *)
@@ -2706,8 +2690,7 @@ Proof.
 
   forward. 
   freeze [0;3] FR1.
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]. 
-  simpl in type, mds, flags,ini, upd, fin, ctxsize, blsize.
+  destruct_vals vals cxtszH1.
   deadvars!.
   unfold EVP_MD_NNnode; Intros. 
   destruct d; simpl in Pd; try contradiction. 
@@ -2744,7 +2727,6 @@ Proof.
          data_at ish (Tstruct _env_md_ctx_st noattr) (Vptr b i, (md, (nullval, pv2))) ictx)).
   2: solve [inv H].
   { clear H H' Pd.  (* unfold POSTCONDITION, abbreviate; clear POSTCONDITION. *)thaw MD'.
-    simpl in cxtszH1; subst.
     forward_if ( 
       PROP ( )
       LOCAL (gvars gv; temp _tmp_buf md'; temp _out octx; temp _in ictx)
@@ -2770,7 +2752,7 @@ Proof.
          { simpl. cancel. }
          { simpl; split; trivial. split; trivial. apply Int.unsigned_range_2. }
     entailer!. }
-  simpl in cxtszH1; subst. forward. forward. forward. 
+  forward. forward. forward. 
   forward_if (
     PROP ( )
     LOCAL (gvars gv; temp _t'5 nullval; temp _out octx; temp _in ictx)
@@ -2852,9 +2834,8 @@ Proof.
   { (*holds because of FCout*) rewrite 2 data_at__memory_block. entailer!. }
   forward. simpl. (*replace (force_val (sem_cast_neutral d)) with d by (destruct d; try contradiction; trivial).*)
 
-  forward. 
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]. 
-  simpl in type, mds, flags,ini, upd, fin, ctxsize, blsize, cxtszH1; subst.
+  forward.
+  destruct_vals vals cxtszH1.
   deadvars!.
   forward_if (
     PROP ( )
@@ -2887,7 +2868,7 @@ Proof.
          data_at dsh (Tstruct _env_md_st noattr)
            (type, (mds, (flags, (ini, (upd, (fin, (blsize, Vint ctxsz))))))) d)).
   2: solve [inv H].
-  { clear H. 
+  { clear H H'. 
     forward_if (
       PROP ( )
       LOCAL (gvars gv; temp _tmp_buf nullval; temp _out octx; temp _in ictx)
@@ -3032,9 +3013,8 @@ Proof.
   { (*holds because of FCout*) rewrite 2 data_at__memory_block. entailer!. }
   forward. simpl. (* replace (force_val (sem_cast_neutral d)) with d by (destruct d; try contradiction; trivial).*)
 
-  forward. 
-  destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]]. 
-  simpl in type, mds, flags,ini, upd, fin, ctxsize, blsize, cxtszH1; subst.
+  forward.
+  destruct_vals vals cxtszH1.
   deadvars!.
   forward_if (
     PROP ( )
@@ -3153,7 +3133,7 @@ Proof.
      { forward; entailer!. }
   forward. Exists (Vint Int.one); entailer!. unfold POST7. normalize.
   apply orp_right2; Exists m. entailer!.
-Time Qed. (*117s*) 
+Time Qed. (*108s*) 
 
 Definition EVP_Digest_SPEC := DECLARE _EVP_Digest
   WITH gv: globals, d:val, cnt:int, md:val, sz:val, t:val, e:val,
@@ -3291,7 +3271,8 @@ Proof. start_function.
   { forward_call (v_ctx, Tsh, (t, (m, (nullval, nullval))), md, osh, sz, tsh, tvals, ctxsz', Data, Tsh, mdsize).
     { assert (Frame = [FRZL FRUpdIni]); subst Frame; [ reflexivity | clear H; simpl; cancel].
       apply Upd2Fin. }
-    { repeat split; trivial; try omega; intuition. }
+    { specialize readable_share_top; specialize writable_share_top; intros.
+      repeat (split; trivial); try omega. }
     forward. entailer!. }
   forward.
   replace_SEP 1 (memory_block Tsh (Int.unsigned ctxsz') m).
@@ -3306,7 +3287,7 @@ Proof. start_function.
   forward. Exists Int.one. entailer!.
   thaw REST; thaw FRUpdIni; thaw FRIni; cancel.
   apply orp_right2. entailer!.
-Time Qed.
+Qed.
 
 (*Continue here
 Parameter contentmodels (*bytes specdata*): list val ->  EVP_MD_CTX -> Prop.
