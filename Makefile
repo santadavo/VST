@@ -35,7 +35,7 @@ ANNOTATE=silent   # suppress chatty output from coqc
 CC_TARGET= $(COMPCERT)/cfrontend/Clight.vo
 CC_DIRS= lib common cfrontend exportclight
 VSTDIRS= msl sepcomp veric floyd progs concurrency ccc26x86 
-OTHERDIRS= wand_demo sha fcf hmacfcf tweetnacl20140427 hmacdrbg aes mailbox atomics dig
+OTHERDIRS= wand_demo sha fcf hmacfcf tweetnacl20140427 hmacdrbg aes mailbox atomics dig boringssl_fips_20180730
 DIRS = $(VSTDIRS) $(OTHERDIRS)
 CONCUR = concurrency
 
@@ -366,6 +366,11 @@ TWEETNACL_FILES = \
   verif_crypto_stream_salsa20_xor.v verif_crypto_stream.v \
   verif_verify.v
 
+FIPSDIGEST_FILES = \
+  mem.v thread_none.v digest.v digests.v \
+  digest_model.v spec_digest_base.v spec_mem.v verif_mem.v \
+  spec_digest.v verif_digest.v verif_digests.v
+
 DIGEST_FILES = \
   digest.v digests.v digest_model.v spec_digests.v 
 # abstractspec_digests.v digestProposal1.v digestsProposal1.v  abstractspec_digestsProposal1.v
@@ -417,6 +422,7 @@ FILES = \
  $(SHA_FILES:%=sha/%) \
  $(HMAC_FILES:%=sha/%) \
  $(DIGEST_FILES:%=dig/%) \
+ $(FIPSDIGEST_FILES:%=boringssl-fips20180730/%) \
  $(FCF_FILES:%=fcf/%) \
  $(HMACFCF_FILES:%=hmacfcf/%) \
  $(HMACEQUIV_FILES:%=sha/%) \
@@ -514,6 +520,7 @@ wand_demo:   _CoqProject $(WAND_DEMO_FILES:%.v=wand_demo/%.vo)
 sha:     _CoqProject $(SHA_FILES:%.v=sha/%.vo)
 hmac:    _CoqProject $(HMAC_FILES:%.v=sha/%.vo)
 digest:    _CoqProject $(DIGEST_FILES:%.v=dig/%.vo)
+fipsdigest:    _CoqProject $(FIPSDIGEST_FILES:%.v=boringssl_fips_20180730/%.vo)
 hmacequiv:    _CoqProject $(HMAC_FILES:%.v=sha/%.vo)
 fcf:     _CoqProject $(FCF_FILES:%.v=fcf/%.vo)
 hmacfcf: _CoqProject $(HMACFCF_FILES:%.v=hmacfcf/%.vo)
@@ -554,8 +561,7 @@ progs/even.v: progs/even.c progs/odd.c
 progs/odd.v: progs/even.v
 mailbox/mailbox.v: mailbox/atomic_exchange.c mailbox/mailbox.c
 	$(CLIGHTGEN) ${CGFLAGS} $^
-dig/digest.v dig/digests.v: dig/digest.c dig/digests.c
-	$(CLIGHTGEN) ${CGFLAGS} $^
+
 # GENERAL RULES FOR SINGLE_C_FILES and NORMAL_C_FILES
 $(patsubst %.c,progs/%.v, $(SINGLE_C_FILES)): progs/%.v: progs/%.c
 	$(CLIGHTGEN) ${CGFLAGS} -normalize $^
