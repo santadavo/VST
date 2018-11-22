@@ -369,7 +369,8 @@ TWEETNACL_FILES = \
 FIPSDIGEST_FILES = \
   mem.v thread_none.v digest.v digests.v \
   digest_model.v spec_digest_base.v spec_mem.v verif_mem.v \
-  spec_digest.v verif_digest.v verif_digests.v
+  spec_digest.v verif_digest.v verif_digests.v \
+  digest_protocol_spec.v
 
 DIGEST_FILES = \
   digest.v digests.v digest_model.v spec_digests.v 

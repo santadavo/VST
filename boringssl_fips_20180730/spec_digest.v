@@ -66,18 +66,25 @@ Definition EVP_add_digest_SPEC := DECLARE _EVP_add_digest
       PROP () LOCAL (temp _digest v) SEP ()
   POST [tint] PROP () LOCAL (temp ret_temp (Vint Int.one)) SEP ().
 
+(*All uses of this mpred occurs in places where the variable pointing to
+  the data structures has type EVP_MD_CTX - hence, we should not use the tarray - based definition*)
+Definition CTX_NULL sh p: mpred := (*
+  let n:= sizeof (Tstruct _env_md_ctx_st noattr) in
+  data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vint Int.zero)) p*)
+  data_at sh (Tstruct _env_md_ctx_st noattr) (nullval, (nullval, (nullval, nullval))) p.
+
 Definition EVP_MD_CTX_init_SPEC := DECLARE _EVP_MD_CTX_init
-   WITH ctx:val, sh:share, n:Z
+   WITH ctx:val, sh:share(*, n:Z*)
    PRE [ _ctx OF tptr (Tstruct _env_md_ctx_st noattr) ]
-       PROP (writable_share sh; n=sizeof (Tstruct _env_md_ctx_st noattr))
+       PROP (writable_share sh)
        LOCAL (temp _ctx ctx)
        SEP (data_at_ sh (Tstruct _env_md_ctx_st noattr) ctx)
    POST [ tvoid ]
        PROP ()
        LOCAL ()
-       SEP (data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vint Int.zero)) ctx).
+       SEP (CTX_NULL sh ctx).
 
-Definition EVP_MD_CTX_NEW_SPEC :=
+Definition EVP_MD_CTX_newcreate_SPEC :=
    WITH gv:globals
    PRE [ ]
        PROP (sizeof (Tstruct _env_md_ctx_st noattr) + 8 <= Int.max_unsigned - (WA + WORD))
@@ -87,12 +94,12 @@ Definition EVP_MD_CTX_NEW_SPEC :=
      EX ctx:val,
        PROP ((sizeof (Tstruct _env_md_ctx_st noattr)) = 16)
        LOCAL (temp ret_temp ctx)
-       SEP ((!!(ctx=nullval) && emp) || (OPENSSL_malloc_token 16 ctx * data_at_ Ews (tarray tuchar 16) ctx);
+       SEP ((!!(ctx=nullval) && emp) || (OPENSSL_malloc_token 16 ctx * CTX_NULL Ews ctx (*data_at_ Ews (tarray tuchar 16) ctx*));
             mm_inv gv).
 
-Definition EVP_MD_CTX_new_SPEC := DECLARE _EVP_MD_CTX_new EVP_MD_CTX_NEW_SPEC.
+Definition EVP_MD_CTX_new_SPEC := DECLARE _EVP_MD_CTX_new EVP_MD_CTX_newcreate_SPEC.
 
-Definition EVP_MD_CTX_create_SPEC := DECLARE _EVP_MD_CTX_create EVP_MD_CTX_NEW_SPEC.
+Definition EVP_MD_CTX_create_SPEC := DECLARE _EVP_MD_CTX_create EVP_MD_CTX_newcreate_SPEC.
 
 (****** Specs of the four Digest Operation Accessors. *******)
 (*nonnull node*)
@@ -237,7 +244,7 @@ Definition EVP_Digest_SPEC := DECLARE _EVP_Digest
                    if Val.eq sz nullval then emp 
                    else data_at Ews tuint (Vint (Int.repr (md_size_of_MD D))) sz)))).
 
-Definition EVP_MD_CTX_cleanup_SPEC := DECLARE _EVP_MD_CTX_cleanup
+Definition EVP_MD_CTX_cleanupreset_SPEC := 
   WITH gv: globals, ctx:val, sh:share, mdd:val, c: option Z
   PRE [ _ctx OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
       PROP (writable_share sh)
@@ -250,9 +257,14 @@ Definition EVP_MD_CTX_cleanup_SPEC := DECLARE _EVP_MD_CTX_cleanup
   POST [ tint ]
        PROP (field_compatible (Tstruct _env_md_ctx_st noattr) [] ctx)
        LOCAL (temp ret_temp (Vint (Int.one)))
-       SEP (data_at_ sh (tarray tuchar (sizeof (Tstruct _env_md_ctx_st noattr))) ctx; mm_inv gv).
-(*could (should?) strengthen at data_at_ to data_at list_repeat .. 0
-Maybe expose it here and hide it in white/blackbox abstract specs? Discuss this in the paper.*)
+       SEP (CTX_NULL sh ctx (*data_at_ sh (tarray tuchar (sizeof (Tstruct _env_md_ctx_st noattr))) ctx*);
+             mm_inv gv).
+(*have strengthened at data_at_ to data_at list_repeat .. 0
+Discuss white/blackbox abstract specs in the paper?*)
+
+Definition EVP_MD_CTX_cleanup_SPEC := DECLARE _EVP_MD_CTX_cleanup EVP_MD_CTX_cleanupreset_SPEC.
+
+Definition EVP_MD_CTX_reset_SPEC := DECLARE _EVP_MD_CTX_reset EVP_MD_CTX_cleanupreset_SPEC.
 
 Variant copyEx_cases :=
   copyEx_ictxNull: copyEx_cases
@@ -364,10 +376,10 @@ Definition copyPost gv (c:copy_cases) (ictx octx rv:val) osh: mpred :=
 match c with 
   cp_ictxNull => 
     !!(rv=nullval) 
-    && data_at osh (tarray tuchar 16) (list_repeat 16 (Vint Int.zero)) octx
+    && CTX_NULL osh octx(*data_at osh (tarray tuchar 16) (list_repeat 16 (Vint Int.zero)) octx*)
 | cp_inDigestNull ish md pv1 pv2 => 
     !!(rv=nullval) 
-    && data_at osh (tarray tuchar 16) (list_repeat 16 (Vint Int.zero)) octx *
+    && CTX_NULL osh octx (*data_at osh (tarray tuchar 16) (list_repeat 16 (Vint Int.zero)) octx*) *
     data_at ish (Tstruct _env_md_ctx_st noattr) (nullval, (md, (pv1, pv2))) ictx
 (*| cp_inDataNull ish d pv2 dsh vals =>
     !!(rv=Vint Int.one) 
@@ -390,7 +402,7 @@ end.
 
 (*since init is called, octx must not be null!*)
 Definition EVP_MD_CTX_copy_SPEC := DECLARE _EVP_MD_CTX_copy
-  WITH gv:globals,(*ep: val, *)octx:val, ictx:val, osh:share, case:copy_cases
+  WITH gv:globals, octx:val, ictx:val, osh:share, case:copy_cases
   PRE [ _out OF (tptr (Tstruct _env_md_ctx_st noattr)),
         _in OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
       PROP (writable_share osh)
@@ -402,23 +414,7 @@ Definition EVP_MD_CTX_copy_SPEC := DECLARE _EVP_MD_CTX_copy
        LOCAL (temp ret_temp rv)
        SEP (ERRGV gv; copyPost gv case ictx octx rv osh).
 
-Definition EVP_MD_CTX_reset_SPEC := DECLARE _EVP_MD_CTX_reset
-  WITH gv:globals, ctx:val, sh:share, mdd:val, c: option Z
-  PRE [ _ctx OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
-      PROP (writable_share sh)
-      LOCAL (gvars gv; temp _ctx ctx)
-      SEP (EX d:val, EX pv1:val, EVP_MD_CTX_NNnode sh (d, (mdd, (pv1, nullval))) ctx;
-           match c with 
-              None => !!(mdd=nullval) && emp
-            | Some sz => memory_block Ews sz mdd * OPENSSL_malloc_token sz mdd
-            end; mm_inv gv)
-  POST [ tint]
-       PROP (field_compatible (Tstruct _env_md_ctx_st noattr) [] ctx)
-       LOCAL (temp ret_temp (Vint Int.one))
-       SEP (data_at sh (tarray tuchar (sizeof (Tstruct _env_md_ctx_st noattr))) (list_repeat 16 (Vint Int.zero)) ctx;
-            mm_inv gv).
-
-Definition EVP_MD_CTX_free_SPEC := DECLARE _EVP_MD_CTX_free
+Definition EVP_MD_CTX_freedestroy_SPEC :=
   WITH gv:globals, ctx:val, d:val, md: val, pv1:val, c: option Z
   PRE [ _ctx OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
       PROP ()
@@ -435,23 +431,9 @@ Definition EVP_MD_CTX_free_SPEC := DECLARE _EVP_MD_CTX_free
        LOCAL ()
        SEP (mm_inv gv).
 
-(*same as for EVP_MD_CTX_free*)
-Definition EVP_MD_CTX_destroy_SPEC := DECLARE _EVP_MD_CTX_destroy
-  WITH gv:globals, ctx:val, d:val, md: val, pv1:val, c: option Z
-  PRE [ _ctx OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
-      PROP ()
-      LOCAL (gvars gv; temp _ctx ctx)
-      SEP ((!!(ctx=nullval) && emp)
-           || (EVP_MD_CTX_NNnode Ews (d, (md, (pv1, nullval))) ctx *
-               match c with 
-                 None => !!(md=nullval) && emp
-               | Some sz => memory_block Ews sz md * OPENSSL_malloc_token sz md
-               end * OPENSSL_malloc_token (sizeof (Tstruct _env_md_ctx_st noattr)) ctx);
-            mm_inv gv)
-  POST [ tvoid ]
-       PROP ()
-       LOCAL ()
-       SEP (mm_inv gv).
+Definition EVP_MD_CTX_free_SPEC := DECLARE _EVP_MD_CTX_free EVP_MD_CTX_freedestroy_SPEC.
+
+Definition EVP_MD_CTX_destroy_SPEC := DECLARE _EVP_MD_CTX_destroy EVP_MD_CTX_freedestroy_SPEC.
 
 Definition EVP_DigestFinal_SPEC := DECLARE _EVP_DigestFinal
   WITH gv:globals, ctx: val, sh:share,
@@ -461,7 +443,7 @@ Definition EVP_DigestFinal_SPEC := DECLARE _EVP_DigestFinal
   PRE [ _ctx OF tptr (Tstruct _env_md_ctx_st noattr),
         _md OF tptr tuchar, _size OF tptr tuint]
       PROP (writable_share sh; writable_share osh;
-            0 < ctx_size_of_MD (__EVP_MD DC) <= Int.max_unsigned;
+            0 <= ctx_size_of_MD (__EVP_MD DC) <= Int.max_unsigned;
             snd(snd(snd CTX))=nullval (*pv2*))
       LOCAL (gvars gv; temp _ctx ctx; temp _md out; temp _size sz )
       SEP (data_at sh (Tstruct _env_md_ctx_st noattr) CTX ctx;
@@ -473,11 +455,11 @@ Definition EVP_DigestFinal_SPEC := DECLARE _EVP_DigestFinal
   POST [ tint] 
        PROP ()
        LOCAL (temp ret_temp (Vint Int.one))
-       SEP (data_at_ sh (Tstruct _env_md_ctx_st noattr) ctx;
+       SEP (CTX_NULL sh ctx;
               EVP_MD_rep (__EVP_MD DC) (type_of_ctx CTX);
               if Val.eq sz nullval then emp else data_at Ews tuint (Vint (Int.repr ((md_size_of_MD (__EVP_MD DC))))) sz;
               data_block osh (FIN DC) out; mm_inv gv).
-
+(*
 Definition DIE_preMpred mdd (p: option (list val * EVP_MD)): mpred :=
     match p with
     | None => !!(mdd = nullval) && emp
@@ -502,7 +484,32 @@ Definition DIE_postMpred rv d t pv mdd ctx csh T (p: option (list val * EVP_MD))
 Variant DigestInitExCase :=
   DIEC_EQ
 | DIEC_NEQ: option (share * reptype (Tstruct digests._env_md_st noattr)) -> 
-            option (list val * EVP_MD) -> DigestInitExCase.
+            option (list val * EVP_MD) -> DigestInitExCase.*)
+Definition DIE_preMpred mdd (p: option MD_with_content): mpred :=
+    match p with
+    | None => !!(mdd = nullval) && emp
+    | Some DC => (*!!(get_ctxsize dvals = Vint (Int.repr (ctx_size_of_MD DD)) /\ Int.ltu Int.zero sz = true) && *)
+                     MD_state Ews DC mdd (*data_at Ews (tarray tuchar (ctx_size_of_MD D)) v mdd *) *
+                     OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) mdd
+    end.
+
+Definition DIE_postMpred rv d t pv mdd ctx csh T (p: option MD_with_content): mpred :=
+   (!!(rv= nullval)
+    && data_at csh (Tstruct _env_md_ctx_st noattr) (d,(mdd,pv)) ctx * 
+       match p with
+       | None => emp
+       | Some DC => MD_state Ews DC mdd (*data_at Ews (tarray tuchar (ctx_size_of_MD D)) v mdd *) *
+                        OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) mdd
+       end)
+|| (EX m :_, !!(rv= Vint Int.one)
+             && data_at csh (Tstruct _env_md_ctx_st noattr) (t, (m, pv)) ctx * 
+                MD_state Ews (INI T) m *
+                OPENSSL_malloc_token (ctx_size_of_MD T) m).
+
+Variant DigestInitExCase :=
+  DIEC_EQ
+| DIEC_NEQ: option (share * reptype (Tstruct digests._env_md_st noattr)) -> 
+            option MD_with_content -> DigestInitExCase.
 
 Definition EVP_DigestInit_ex_SPEC := DECLARE _EVP_DigestInit_ex
   WITH ctx:val, t:val, e:val, d:val, mdd:val, pv: val * val, T: EVP_MD,
@@ -538,14 +545,14 @@ Definition EVP_DigestInit_ex_SPEC := DECLARE _EVP_DigestInit_ex
             end).
 
 Definition EVP_DigestInit_SPEC := DECLARE _EVP_DigestInit
-  WITH ctx:val, t:val, e:val, d:val, mdd:val, pv: val * val, T: EVP_MD, gv:globals, csh:share,
-       c: option (share * reptype (Tstruct digests._env_md_st noattr) * option (list val * EVP_MD))
+  WITH ctx:val, t:val, T: EVP_MD, gv:globals, csh:share
   PRE [ _ctx OF tptr (Tstruct _env_md_ctx_st noattr), 
         _type OF tptr (Tstruct _env_md_st noattr) ]
       PROP (4 <= ctx_size_of_MD T <= Int.max_unsigned- (WA + WORD) - 8; 
             writable_share csh)
       LOCAL (gvars gv; temp _ctx ctx; temp _type t)
-      SEP (ERRGV gv; EVP_MD_CTX_NNnode csh (d,(mdd,pv)) ctx; EVP_MD_rep T t;mm_inv gv)
+      SEP (data_at_ csh (Tstruct _env_md_ctx_st noattr) ctx; 
+           ERRGV gv; EVP_MD_rep T t;mm_inv gv)
   POST [ tint] EX rv:_,
        PROP ()
        LOCAL (temp ret_temp rv)

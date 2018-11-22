@@ -22,6 +22,8 @@ Record MD_with_content :=
   end.*)
 
 Parameter MD_state: forall (sh:share) (DC: MD_with_content), val -> mpred.
+Parameter MD_state_memoryblock: forall sh DC p,
+      MD_state sh DC p |-- memory_block sh (ctx_size_of_MD (__EVP_MD DC)) p.
 
 (******* Access functions for reptype (Tstruct _env_md_ctx_st noattr) **)
 
