@@ -8,7 +8,7 @@ Definition EVP_do_init_SPEC (x:ident) (D:EVP_MD) :=
 DECLARE x
   WITH gv:globals, p:val, sh:share
   PRE [ _out OF tptr (Tstruct _env_md_st noattr) ]
-     PROP (writable_share sh)
+     PROP (writable_share sh; 4 <= ctx_size_of_MD D <= Int.max_unsigned - (spec_mem.WA + spec_mem.WORD) - 8)
      LOCAL (gvars gv; temp _out p)
      SEP (data_at_ sh (Tstruct _env_md_st noattr) p)
   POST [ tvoid ]
@@ -147,7 +147,9 @@ Proof. start_function. forward. Qed.
 Lemma body_EVP_md5_sha1_storage_bss_get: semax_body Vprog EmptyGprog f_EVP_md5_sha1_storage_bss_get EVP_md5_sha1_storage_bss_get_SPEC.
 Proof. start_function. forward. Qed.
 
-Definition EVP_init_PRE (D:EVP_MD) (g: ident) gv := EX sh:share, !!(writable_share sh) && data_at_ sh (Tstruct _env_md_st noattr) (gv g).
+Definition EVP_init_PRE (D:EVP_MD) (g: ident) gv := EX sh:share, 
+   !!(writable_share sh /\ 4 <= ctx_size_of_MD D <= Int.max_unsigned - (spec_mem.WA + spec_mem.WORD) - 8) 
+   && data_at_ sh (Tstruct _env_md_st noattr) (gv g).
 Definition EVP_init_POST (D:EVP_MD) (g: ident) gv:= EVP_MD_rep D (gv g).
 
 Definition EVP_init_SPEC (D:EVP_MD) (f g: ident):= 
@@ -294,13 +296,14 @@ forward.
       SEP (data_at osh tuint (Vint i) once; P gv; func_ptr' (CRYPTO_ONCE_SubjectSPEC P Q) init)).
 + forward. Exists i. entailer!. unfold IFZ_mpred. rewrite Int.eq_false; trivial.
 + forward. entailer.
-+ Intros; subst. forward. forward_call gv. forward. Exists (Int.repr 1). entailer!. inv H1.
++ Intros; subst. forward. forward_call gv. forward. Exists (Int.repr 1). entailer!. discriminate.
 Qed.
 
 Definition EVP_digest_SPEC D (f once storage: ident):= 
 DECLARE f
   WITH gv:globals,i:int
-  PRE [ ] PROP () 
+  PRE [ ] PROP ((*4 <= ctx_size_of_MD D <=
+             Int.max_unsigned - (spec_mem.WA + spec_mem.WORD) - 8*)) 
           LOCAL (gvars gv) 
           SEP (data_at Tsh tuint (Vint i) (gv once);
                IFZ_mpred i (EVP_init_PRE D storage gv) (EVP_init_POST D storage gv))

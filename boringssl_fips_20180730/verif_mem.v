@@ -16,7 +16,7 @@ Proof.
   forward_if (
     PROP ( )
     LOCAL (temp _dst dst; temp _src src; temp _n (Vint (Int.repr n)))
-    SEP (data_at ssh (tarray tuchar n) (map Vint data) src; memory_block dsh n dst)); [ omega |  forward; entailer! | ].
+    SEP (data_at ssh (tarray tuchar n) (map Vubyte data) src; memory_block dsh n dst)); [ omega |  forward; entailer! | ].
   forward_call ((ssh,dsh), dst, src, n, data); [ simpl; cancel | simpl; intuition | forward].
   cancel.
 Qed.
@@ -30,7 +30,7 @@ Proof.
 + (*memsetPtr*)
   forward_if (
     PROP ( )
-    LOCAL (temp _dst dst; temp _c (Vint c); temp _n (Vint (Int.repr n)))
+    LOCAL (temp _dst dst; temp _c (Vubyte c); temp _n (Vint (Int.repr n)))
     SEP (memory_block s n dst)); [ omega | forward ; entailer! | ].
   forward_call (s,dst,n,c); [ intuition | forward ].
 Qed.
@@ -40,10 +40,10 @@ Lemma body_OPENSSL_cleanse_SPEC: semax_body Vprog GprogOPENSSL_cleanse f_OPENSSL
 Proof.
   start_function. rewrite memory_block_isptr; Intros. destruct p; try contradiction.
   destruct (zeq n 0).
-+ subst. forward_call (Vptr b i, Z0, Int.zero, memsetNull).
++ subst. forward_call (Vptr b i, Z0, Byte.zero, memsetNull).
   { rewrite memory_block_zero_Vptr. entailer!. }
   forward. rewrite data_at_zero_array_eq; trivial.
-+ forward_call (Vptr b i, n, Int.zero, memsetNonnull sh).
++ forward_call (Vptr b i, n, Byte.zero, memsetNonnull sh).
   { entailer!. }
   forward.
 Qed.

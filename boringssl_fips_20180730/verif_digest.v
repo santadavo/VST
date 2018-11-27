@@ -113,109 +113,10 @@ Search data_at.data_at_tuchar_singleton_array_inv, data_at_tuchar_singleton_arra
 data_at_singleton_array_eq*)*)*)
 Admitted.
 
-Lemma Valeq_Vint {A} i j (a b:A):
-      (if Val.eq (Vint i) (Vint j) then a else b) =
-      (if Int.eq i j then a else b).
-Proof. 
- remember (Int.eq i j). destruct b0.
-+ rewrite ( binop_lemmas2.int_eq_true _ _ Heqb0). rewrite if_true; trivial.
-+ remember (Val.eq (Vint i )(Vint j)) as d.
-  destruct d; trivial.
-  inversion e; subst; simpl in *.
-  specialize (int_eq_false_e j j); intuition.
-Qed. 
-
-Lemma ptr_comp_Cne_t p q (P: is_pointer_or_null p) (Q: is_pointer_or_null q): 
-      typed_true tint (force_val (sem_cmp_pp Cne p q)) <-> ~(p=q).
-Proof.
-  destruct p; destruct q; try contradiction; simpl in *; subst;
-  unfold typed_true, sem_cmp_pp; simpl; split; intros; trivial; try solve [inv H].
-+ elim H; trivial.
-+ intros N; inv N. rewrite if_true, Ptrofs.eq_true in H; trivial; inv H.
-+ destruct (eq_block b b0); subst; trivial.
-  destruct (Ptrofs.eq_dec i i0); subst; [ elim H; trivial | rewrite Ptrofs.eq_false; trivial].
-Qed.
-
-Lemma ptr_comp_Cne_t' {T} p q 
-      (H: typed_true tint (force_val (sem_cmp_pp Cne p q)))
-       (a b:T) (P: is_pointer_or_null p)
-               (Q: is_pointer_or_null q):
-      (if Val.eq p q then a else b) = b.
-Proof. apply ptr_comp_Cne_t in H; trivial.
-  rewrite if_false; trivial.
-Qed.
-
-Lemma ptr_comp_Cne_f p q (P: is_pointer_or_null p) (Q: is_pointer_or_null q): 
-      typed_false tint (force_val (sem_cmp_pp Cne p q)) <-> (p=q).
-Proof.
-  destruct p; destruct q; try contradiction; simpl in *; subst;
-  unfold typed_false, sem_cmp_pp; simpl; split; intros; trivial; try solve [inv H].
-+ destruct (eq_block b b0); [subst; simpl in H | inv H].
-  destruct (Ptrofs.eq_dec i i0); subst; trivial.
-  rewrite Ptrofs.eq_false in H; trivial; inv H. 
-+ inv H. rewrite if_true, Ptrofs.eq_true; trivial. 
-Qed.
-
-Lemma ptr_comp_Cne_f' {T} p q 
-      (H: typed_false tint (force_val (sem_cmp_pp Cne p q)))
-       (a b:T) (P: is_pointer_or_null p)
-               (Q: is_pointer_or_null q):
-      (if Val.eq p q then a else b) = a.
-Proof. apply ptr_comp_Cne_f in H; trivial.
-  rewrite if_true; trivial.
-Qed.
-
-Lemma data_at__valid_pointer {cs : compspecs} sh t p:
-  sepalg.nonidentity sh ->
-  sizeof t > 0 ->
-  @data_at_ cs sh t p |-- valid_pointer p.
-Proof. intros. unfold data_at_, field_at_. apply field_at_valid_ptr0; simpl; trivial. Qed.
-
-Lemma func_ptr'_isptr' v f: (func_ptr' f v) = ((!! isptr v) && func_ptr' f v).
-Proof. apply pred_ext; entailer!. Qed.
-
-Lemma writable_nonidentity sh (W:writable_share sh): sepalg.nonidentity sh.
-Proof. apply readable_nonidentity. apply writable_readable; trivial. Qed.
-
-Lemma semax_orp {cs Espec Delta P1 P2 Q c}
-  (HR1: @semax cs Espec Delta P1 c Q)
-  (HR2: @semax cs Espec Delta P2 c Q):
-  @semax cs Espec Delta (P1 || P2) c Q.
-Proof.
- eapply semax_pre with (P':=EX x:bool, if x then P1 else P2).
-+ old_go_lower. apply orp_left; [Exists true | Exists false]; entailer!.
-+ Intros b. destruct b; trivial.
-Qed.
-
-Lemma semax_orp_SEPx (cs : compspecs) (Espec : OracleKind)
-      (Delta : tycontext) (P : list Prop) (Q : list localdef)
-      (R1 R2 : mpred) (R:list mpred) (T : ret_assert) (c : statement)
-  (HR1 : semax Delta
-         (PROPx P (LOCALx Q (SEPx (cons R1 R)))) c T)
-  (HR2 : semax Delta
-         (PROPx P (LOCALx Q (SEPx (cons R2 R)))) c T):
-semax Delta
-  (PROPx P (LOCALx Q (SEPx (cons (orp R1 R2) R)))) c T.
-Proof.
- eapply semax_pre; [| apply (semax_orp HR1 HR2)].
- old_go_lower.
- rewrite distrib_orp_sepcon. normalize. 
-Qed.
-
-Lemma semax_orp_SEPnil cs Espec Delta P Q R1 R2 T c
-  (HR1: @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R1)) c T)
-  (HR2: @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R2)) c T):
-  @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R1 || R2)) c T.
-Proof. apply semax_orp_SEPx; trivial. Qed.
-Lemma semax_orp_SEP cs Espec Delta P Q R1 R2 R T c
-  (HR1: @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R1; R)) c T)
-  (HR2: @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R2; R)) c T):
-  @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP ((R1 || R2); R)) c T.
-Proof. apply semax_orp_SEPx; trivial. Qed.
-
 Ltac destruct_vals vals X :=
    destruct vals as [type [mds [flags [ini [upd [fin [blsize ctxsize]]]]]]];
    simpl in type, mds, flags, ini, upd, fin, blsize, ctxsize, X; subst; simpl.
+
 (*
 Ltac verif_EVP_MD_component :=
   start_function;
@@ -337,7 +238,7 @@ Proof.
       (nullval, (nullval, (nullval, nullval))) octx).
   { unfold CTX_NULL. entailer!. }
 (*  solve [(*holds because of FCout*) entailer!; apply convert; [ apply writable_readable | ]; trivial ].*)
-  rewrite data_at_isptr with (p:=d); Intros.
+  rewrite data_at_isptr with (p:=d); Intros. 
   forward_call (gv, octx, ictx, copyEx_other ish d md nullval nullval dsh vals 
                 osh nullval nullval nullval ctxsz imdsh idata (@None (share * reptype (Tstruct _env_md_st noattr) * int))).
   { simpl. rewrite if_false; [ entailer! | intros N; subst; contradiction]. }
@@ -428,7 +329,7 @@ Proof.
     LOCAL (temp _tmp_buf buf; temp _pctx (Vint (Int.repr 0)); gvars gv; temp _out octx; temp _in ictx)
     SEP (memory_block Ews (Int.unsigned ctxsz) buf; 
          OPENSSL_malloc_token (Int.unsigned ctxsz) buf; mm_inv gv;
-         data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vint idata) md;
+         data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vubyte idata) md;
          data_at osh (Tstruct _env_md_ctx_st noattr) (d', (m, (pv1', nullval))) octx;
          EX dsh' : share, EX vals' : _, EX ctxsz':_, 
          if Val.eq d d' 
@@ -540,7 +441,7 @@ Proof.
   forward_call (buf, md, Int.unsigned ctxsz, memcpyNonnull Ews imdsh idata).
   { rewrite Int.repr_unsigned. simpl; entailer!. }
   { entailer!. }
-  Intros.
+  Intros. deadvars!.
   do 4 forward.
   Exists (Vint Int.one); entailer!.
   destruct (Val.eq d d'). 
@@ -549,7 +450,7 @@ Proof.
     destruct pp as [[[? ?] ?] | ].
     * destruct PP as [? [? [? [? [? ?]]]]]; subst; trivial.
     * destruct PP as [? [? ?]]; subst; cancel.
-Time Qed. (*24s*)
+Time Qed. (*20s*)
 
 Lemma body_EVP_MD_type: semax_body Vprog EmptyGprog f_EVP_MD_type EVP_MD_type_SPEC.
 Proof. verif_EVP_MD_component. Qed.
@@ -621,7 +522,7 @@ Lemma body_EVP_MD_CTX_init: semax_body Vprog Gprog_EVPMDCTX_1 f_EVP_MD_CTX_init 
 Proof.
   start_function.
   rewrite data_at__memory_block; simpl; Intros. 
-  forward_call (ctx, 16, Int.zero, memsetNonnull sh). entailer!.
+  forward_call (ctx, 16, Byte.zero, memsetNonnull sh). entailer!.
   forward.
   unfold CTX_NULL. apply convert; trivial. apply writable_readable; trivial.
 Qed.
@@ -851,10 +752,10 @@ Definition Gprog_DigestFinal_ex : funspecs :=
 
 Lemma body_DigestFinal_ex: semax_body Vprog Gprog_DigestFinal_ex f_EVP_DigestFinal_ex EVP_DigestFinal_ex_SPEC.
 Proof. 
-  start_function. subst. rename H into CTXSZ.
+  start_function. subst.  (*rename H into CTXSZ.*)
   rename SH0 into OSH. rename SH1 into MDSH.
   rewrite EVP_MD_rep_isptr'; Intros. rename H into isptrD.
-  unfold EVP_MD_rep. Intros csh vals. rename H into Rcsh.
+  unfold EVP_MD_rep. Intros csh vals. rename H into Rcsh. rename H0 into SZ.
   destruct CTX as [d [md [pv1 pv2]]]; simpl in d, md, pv1, pv2, isptrD; simpl.
   forward.
   destruct_vals vals Rcsh. Intros.
@@ -863,13 +764,13 @@ Proof.
                 out, osh, mdsh, md_size_of_MD (__EVP_MD DC)).
   { simpl; cancel. }
   simpl. replace_SEP 1 (!!(is_pointer_or_null md) &&
-               postFin mdsh (ctx_size_of_MD (__EVP_MD DC)) md).
+               postFin mdsh (__EVP_MD DC) md).
   { entailer. apply postFin_pTN. } 
   Intros. 
   forward_if (PROP ( )
    LOCAL (temp _ctx ctx; temp _md_out out; temp _size sz)
    SEP (data_at sh (Tstruct _env_md_ctx_st noattr) (d, (md, (pv1, pv2))) ctx;
-        postFin mdsh (ctx_size_of_MD (__EVP_MD DC)) md;
+        postFin mdsh (__EVP_MD DC) md;
         data_block osh (FIN DC) out;
         if Val.eq sz nullval then emp else data_at Ews tuint (Vint (Int.repr (md_size_of_MD (__EVP_MD DC)))) sz;
         EVP_MD_rep (__EVP_MD DC) d)).
@@ -885,35 +786,54 @@ Proof.
    clear csh Rcsh.
    forward. forward. unfold EVP_MD_rep. Intros csh vals. rename H4 into Rcsh. subst. clear upd ini fin.
    destruct_vals vals Rcsh. Intros. forward.
+   specialize WA_WORD_nonneg; intros WAW. deadvars!.
+(*   unfold postFin; Intros findata. unfold MD_state; Intros finbytes.
    replace_SEP 1 (memory_block mdsh (ctx_size_of_MD (__EVP_MD DC)) md).
-   { entailer!. apply postFin_memory_block. }
+   { entailer!. unfold data_block. rewrite H4; simpl.
+     eapply derives_trans. apply data_at_memory_block.
+     simpl. rewrite Z.mul_1_l, Z.max_r. trivial. omega. }*)
    forward_call (md, mdsh, ctx_size_of_MD (__EVP_MD DC)).
-   forward. unfold EVP_MD_rep, postFin. entailer!.
+   { unfold postFin; Intros findata. unfold (*MD_state, *)data_block(*; Intros finbytes*).
+     sep_apply (data_at_memory_block mdsh (tarray tuchar (Zlength findata)) (map Vubyte findata) md). 
+     simpl in H4. rewrite <- H4.
+     simpl. rewrite Z.mul_1_l, Z.max_r. cancel. omega. }
+   { intuition. }
+(*   replace_SEP 1 (memory_block mdsh (ctx_size_of_MD (__EVP_MD DC)) md).
+   { entailer!. unfold data_block. rewrite H4; simpl.
+     eapply derives_trans. apply data_at_memory_block.
+     simpl. rewrite Z.mul_1_l, Z.max_r. trivial. omega.split; trivial; rep_omega. }*)
+   forward. unfold EVP_MD_rep. entailer!.
    evar (z:reptype (Tstruct digests._env_md_st noattr)).
    Exists csh z; subst z. entailer!. simpl. entailer!.
+   unfold postFin, MD_state, data_block. 
+   Exists (list_repeat (Z.to_nat (ctx_size_of_MD (__EVP_MD DC))) Byte.zero).
+   rewrite Zlength_list_repeat by (rewrite <- H5; apply Zlength_nonneg).
+   entailer!.
+   rewrite map_list_repeat. trivial.
 Qed.
-
 
 Definition Gprog_DigestFinal : funspecs :=
   [EVP_DigestFinal_ex_SPEC; EVP_MD_CTX_cleanup_SPEC].
 
 Lemma body_DigestFinal: semax_body Vprog Gprog_DigestFinal f_EVP_DigestFinal EVP_DigestFinal_SPEC.
 Proof. 
-  start_function. rename H into CTXSZ. rename H0 into PV2.
+  start_function. rename H into CTXSZ. (*rename H0 into PV2.*)
   rename SH0 into Wosh.
+  (*specialize WA_WORD_nonneg; intros WW. *)
   forward_call (ctx, sh, CTX, out, osh, sz, DC, Ews). 
  (* { intuition. }*)
-  destruct CTX as [d [mdd [pv1 pv2]]]; simpl in d, mdd, pv1, pv2, PV2; subst; simpl.
+  destruct CTX as [d [mdd [pv1 pv2]]]; simpl in d, mdd, pv1, pv2(*, PV2*),CTXSZ; subst; simpl.
   rewrite EVP_MD_rep_isptr'; Intros; simpl.
+  assert_PROP (4 <= ctx_size_of_MD (__EVP_MD DC) <= Int.max_unsigned - (WA + WORD) - 8) as SZ by (unfold EVP_MD_rep; entailer).
   assert_PROP (field_compatible (Tstruct _env_md_ctx_st noattr) [] ctx) as FC by entailer!.
-  replace_SEP 1 (memory_block Ews (Int.unsigned (Int.repr (ctx_size_of_MD (__EVP_MD DC)))) mdd).
+  replace_SEP 1 (memory_block Ews (ctx_size_of_MD (__EVP_MD DC)) mdd).
   { entailer!. apply postFin_memory_block. }
   unfold EVP_MD_rep. Intros csh vals. rename H into Rcsh.
   freeze [4;5] FR1.
   destruct_vals vals Rcsh. Intros.
   assert_PROP (is_pointer_or_null mdd) as PtrN_Mdd by entailer!. 
-  forward_call (gv, ctx, sh, mdd, Some (Int.unsigned (Int.repr (ctx_size_of_MD (__EVP_MD DC))))).
-  { Exists d pv1. unfold EVP_MD_CTX_NNnode. entailer!. cancel. }
+  forward_call (gv, ctx, sh, mdd, Some (ctx_size_of_MD (__EVP_MD DC))).
+  { Exists d pv1. unfold EVP_MD_CTX_NNnode. entailer!. }
   forward. thaw FR1; cancel. unfold EVP_MD_rep, EVP_MD_NNnode.
   evar (z:reptype (Tstruct digests._env_md_st noattr)).
   Exists csh z; subst z. (*unfold CTX_NULL.*) (* rewrite 2 data_at__memory_block.*) entailer!. simpl. entailer!.
@@ -930,7 +850,7 @@ Definition Gprog_DigestInit_ex : funspecs :=
 
 Lemma body_DigestInit_ex: semax_body Vprog Gprog_DigestInit_ex f_EVP_DigestInit_ex EVP_DigestInit_ex_SPEC.
 Proof. 
-  start_function. rename H into SZ. destruct pv as [pv1 pv2]. 
+  start_function. (*rename H into SZ.*) destruct pv as [pv1 pv2]. 
   specialize WA_WORD_nonneg; intros WAWnn. 
   unfold EVP_MD_CTX_NNnode; Intros.
   forward.
@@ -1005,14 +925,15 @@ Proof.
         - abbreviate_semax; thaw FR1.
           freeze [0;1;3;5;6;7;9;10] FR2.
           forward.
-          forward_call (mdd, match o0 with None => 0 | Some DC => ctx_size_of_MD (__EVP_MD DC) end, gv).
-          { destruct o0 as [DC | ]; simpl. 
-            * rewrite OPENSSL_malloc_token_compatible'; Intros. 
+          forward_call (mdd, match o0 with None => 0 | Some (D,v) => ctx_size_of_MD D end, gv).
+          { destruct o0 as [[D v] | ]; simpl. 
+            * rewrite OPENSSL_malloc_token_compatible' ; Intros.
               (*sep_apply (data_at_memory_block Ews (tarray tuchar (ctx_size_of_MD D)) v mdd).
                 simpl; rewrite Z.mul_1_l, Z.max_r by omega.*)
-              sep_apply (MD_state_memoryblock Ews DC mdd).
+              (*sep_apply (MD_state_memoryblock Ews DC mdd).*)
+              sep_apply (data_at_memory_block Ews (tarray tuchar (ctx_size_of_MD D)) (map Vubyte v) mdd); simpl.
               rewrite if_false by (destruct mdd; try contradiction; discriminate).
-              entailer!.
+              entailer!. cancel.
             * Intros; subst. rewrite if_true by reflexivity. cancel. }
           deadvars!. do 2 forward. thaw FR2. Exists m; entailer!.
           destruct o as [[dsh dvals] | ]; Intros; trivial. }
@@ -1021,7 +942,7 @@ Proof.
   remember_vals tvals. (* subst type mds flags blsize ctxsize.*)
   freeze [0;4;5] FR4.
   forward.
-  sep_apply (preInit_fresh_EWS (ctx_size_of_MD T) m).
+  sep_apply (preInit_fresh_EWS (ctx_size_of_MD T) m); [ rep_omega |].
   forward_call (ctx, csh, (t, (m, (pv1,pv2))), tsh, tvals, Int.repr (ctx_size_of_MD T), Ews).
   { rewrite Int.unsigned_repr by omega. simpl; cancel. }
   { rewrite Int.unsigned_repr by omega. subst tvals; repeat (split; trivial); omega. }
@@ -2083,7 +2004,7 @@ Definition Gprog_EVP_Digest : funspecs :=
 Lemma body_EVP_Digest: semax_body Vprog Gprog_EVP_Digest
                            f_EVP_Digest EVP_Digest_SPEC.
 Proof. start_function.
-  rename H into CTXSZ. rename H0 into UPDSC.
+  rename H into CTXSZ. (*rename H0 into UPDSC.*)
   rename SH into DSH. rename SH0 into OSH.
   assert_PROP (field_compatible (Tstruct _env_md_ctx_st noattr) [] v_ctx) as FCctx by entailer!.
   rewrite (EVP_MD_rep_isptr'); Intros. 
@@ -2155,17 +2076,17 @@ Proof. start_function.
            gvars gv; temp _data d; 
            temp _count (Vint cnt); temp _out_md md; temp _out_size sz)
     SEP (data_at Tsh (Tstruct _env_md_ctx_st noattr) (t, (m, (nullval, nullval))) v_ctx;
-         postFin Ews (ctx_size_of_MD D) m;
+         postFin Ews D m;
          EVP_MD_rep D t;OPENSSL_malloc_token (ctx_size_of_MD D) m; mm_inv gv;
          if Val.eq sz nullval then emp else data_at Ews tuint (Vint (Int.repr (md_size_of_MD D))) sz;
          data_block osh (FIN (UPD (INI D) Data (Int.unsigned cnt))) md; data_block dsh Data d; ERRGV gv));
     [ clear H | solve [inv H] |].
   { forward_call (v_ctx, Tsh, (t, (m, (nullval, nullval))), md, osh, sz, UPD (INI D) Data (Int.unsigned cnt), Ews).
     { simpl; cancel. }
-    { simpl. repeat (split; trivial); try omega. }
+(*    { simpl. repeat (split; trivial); try omega.  }*)
     forward. entailer!. }
   forward. deadvars!.
-  sep_apply (postFin_memory_block Ews (ctx_size_of_MD D) m).
+  sep_apply (postFin_memory_block Ews D m).
   unfold EVP_MD_rep. Intros tsh tvals. rename H into Rtsh.
   destruct_vals tvals tsh. Intros.
   forward_call (gv,v_ctx, Tsh, m, Some (ctx_size_of_MD D)).

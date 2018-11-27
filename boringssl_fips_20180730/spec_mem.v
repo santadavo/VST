@@ -59,35 +59,35 @@ SEP (mm_inv gv).
 
 Definition free_spec {cs:compspecs} := DECLARE _free free_funspec.
 
-(*Taken from spec_sha*)
+(*Taken from spec_sha, but now using bytes*)
 Definition memcpy_SPEC {cs:compspecs} := DECLARE _memcpy
-   WITH sh : share*share, p: val, q: val, n: Z, contents: list int
+   WITH sh : share*share, p: val, q: val, n: Z, contents: list byte
    PRE [ 1%positive OF tptr tvoid, 2%positive OF tptr tvoid, 3%positive OF tuint ]
        PROP (readable_share (fst sh); writable_share (snd sh); 0 <= n <= Int.max_unsigned)
        LOCAL (temp 1%positive p; temp 2%positive q; temp 3%positive (Vint (Int.repr n)))
-       SEP (data_at (fst sh) (tarray tuchar n) (map Vint contents) q;
+       SEP (data_at (fst sh) (tarray tuchar n) (map Vubyte contents) q;
               memory_block (snd sh) n p)
     POST [ tptr tvoid ]
        PROP() LOCAL(temp ret_temp p)
-       SEP(data_at (fst sh) (tarray tuchar n) (map Vint contents) q;
-             data_at (snd sh) (tarray tuchar n) (map Vint contents) p).
+       SEP(data_at (fst sh) (tarray tuchar n) (map Vubyte contents) q;
+             data_at (snd sh) (tarray tuchar n) (map Vubyte contents) p).
 
 (*Taken from spec_sha; indeed, it seems p==null yields undef behavior in C11 standard*)
 Definition memset_spec {cs:compspecs} :=
   DECLARE _memset
-   WITH sh : share, p: val, n: Z, c: int
+   WITH sh : share, p: val, n: Z, c: byte
    PRE [ 1%positive OF tptr tvoid, 2%positive OF tint, 3%positive OF tuint ]
        PROP (writable_share sh; 0 <= n <= Int.max_unsigned)
-       LOCAL (temp 1%positive p; temp 2%positive (Vint c);
+       LOCAL (temp 1%positive p; temp 2%positive (Vubyte c);
                    temp 3%positive (Vint (Int.repr n)))
        SEP (memory_block sh n p)
     POST [ tptr tvoid ]
        PROP() LOCAL(temp ret_temp p)
-       SEP(data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vint c)) p).
+       SEP(data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vubyte c)) p).
 
 Inductive memcpyCase :=
   memcpyNull: memcpyCase
-| memcpyNonnull: forall (dsh ssh: share) (data: list int), memcpyCase.
+| memcpyNonnull: forall (dsh ssh: share) (data: list byte), memcpyCase.
 
 Definition OPENSSL_memcpy_SPEC {cs:compspecs} := DECLARE _OPENSSL_memcpy
    WITH dst: val, src: val, n: Z, c:memcpyCase
@@ -98,7 +98,7 @@ Definition OPENSSL_memcpy_SPEC {cs:compspecs} := DECLARE _OPENSSL_memcpy
             | memcpyNull => !!(n=0) && emp
             | memcpyNonnull dsh ssh data =>
                 !!(readable_share ssh /\ writable_share dsh /\ 0 < n <= Int.max_unsigned)
-                && data_at ssh (tarray tuchar n) (map Vint data) src *
+                && data_at ssh (tarray tuchar n) (map Vubyte data) src *
                    memory_block dsh n dst
             end)
     POST [ tptr tvoid ]
@@ -106,8 +106,8 @@ Definition OPENSSL_memcpy_SPEC {cs:compspecs} := DECLARE _OPENSSL_memcpy
        SEP(match c with 
             | memcpyNull => emp
             | memcpyNonnull dsh ssh data =>
-               data_at dsh (tarray tuchar n) (map Vint data) dst *
-               data_at ssh (tarray tuchar n) (map Vint data) src
+               data_at dsh (tarray tuchar n) (map Vubyte data) dst *
+               data_at ssh (tarray tuchar n) (map Vubyte data) src
            end).
 
 Inductive memsetCase :=
@@ -115,10 +115,10 @@ Inductive memsetCase :=
 | memsetNonnull: share -> memsetCase.
 
 Definition OPENSSL_memset_SPEC {cs:compspecs} := DECLARE _OPENSSL_memset  
-   WITH dst: val, n: Z, c: int, case: memsetCase
+   WITH dst: val, n: Z, c: byte, case: memsetCase
    PRE [ _dst OF tptr tvoid, _c OF tint, _n OF tuint ]
        PROP ()
-       LOCAL (temp _dst dst; temp _c (Vint c); temp _n (Vint (Int.repr n)))
+       LOCAL (temp _dst dst; temp _c (Vubyte c); temp _n (Vint (Int.repr n)))
        SEP (match case with
             | memsetNull => !!(n=0) && emp
             | memsetNonnull sh => !!(writable_share sh /\ 0 < n <= Int.max_unsigned) 
@@ -128,7 +128,7 @@ Definition OPENSSL_memset_SPEC {cs:compspecs} := DECLARE _OPENSSL_memset
        PROP() LOCAL(temp ret_temp dst)
        SEP(match case with 
            | memsetNull => emp
-           | memsetNonnull sh => data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vint c)) dst
+           | memsetNonnull sh => data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vubyte c)) dst
            end).
 
 (* Specification in mem.h: OPENSSL_cleanse zeros out |len| bytes of memory at |ptr|. 
@@ -158,7 +158,7 @@ Definition OPENSSL_cleanse_SPEC {cs:compspecs} := DECLARE _OPENSSL_cleanse
       SEP (memory_block sh n p)
   POST [ tvoid ]
     PROP () LOCAL () 
-    SEP (data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vint Int.zero)) p).
+    SEP (data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vubyte Byte.zero)) p).
 
 Definition OPENSSL_malloc_token {cs:compspecs} n v: mpred := 
    let u := offset_val (-8) v in

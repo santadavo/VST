@@ -9,8 +9,6 @@ Require Import boringssl_fips_20180730.spec_digest.
 (*TODO: discuss/find out why some operations permit agument ctx to be null (free, copy_ex, 
 albeit with raising error in the latter case) while others (eg cleanup, reset) don't. *)
 
-Axiom MD_StateFIN: forall DC md, MD_state Ews DC md |-- postFin Ews (ctx_size_of_MD (__EVP_MD DC)) md.
-
 Module Type EVP_MD_CTX_Protocol_TP.
 Variant State :=
   Allocated: State
@@ -196,7 +194,8 @@ Definition LEAK (c:State) :mpred :=
 | Raw => emp
 | Empty D d => EX md:_, MD_state Ews (INI D) md * OPENSSL_malloc_token (ctx_size_of_MD D) md
 | Hashed DC d => EX md:_, MD_state Ews DC md * OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) md
-| Full D d => EX md:_, EX data:_, MD_state Ews (Build_MD_with_content D data) md * OPENSSL_malloc_token (ctx_size_of_MD D) md
+| Full D d => EX md:_, EX data:_, (*MD_state Ews (Build_MD_with_content D data) md*)
+                       data_block Ews data md * OPENSSL_malloc_token (ctx_size_of_MD D) md
   end.
 
 Definition EVP_DigestInit_ASPEC := DECLARE _EVP_DigestInit
@@ -213,7 +212,35 @@ Definition EVP_DigestInit_ASPEC := DECLARE _EVP_DigestInit
             else !!(rv=Vint Int.one) && MDCTX (Empty T t) ctx;
             LEAK c; ERRGV gv; EVP_MD_rep T t; mm_inv gv).
 
-(*The spec for EVP_Digest_SPEC  does not mention any conepts used
+Definition EVP_MD_CTX_copy_ex_ASPEC := DECLARE _EVP_MD_CTX_copy_ex
+  WITH gv:globals, octx:val, ictx:val, c: State
+  PRE [ _out OF (tptr (Tstruct _env_md_ctx_st noattr)),
+        _in OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
+      PROP (c <> Allocated; c <> Raw)
+      LOCAL (gvars gv; temp _out octx; temp _in ictx)
+      SEP (MDCTX c ictx; EVP_of c; MDCTX Raw octx; mm_inv gv; ERRGV gv)
+  POST [ tint] EX rv:_,
+       PROP ()
+       LOCAL (temp ret_temp rv)
+       SEP (if Val.eq rv nullval then MDCTX Raw octx 
+            else (!!(rv=Vint Int.one) && MDCTX c octx);
+            ERRGV gv; mm_inv gv; MDCTX c ictx; EVP_of c).
+
+Definition EVP_MD_CTX_copy_ASPEC := DECLARE _EVP_MD_CTX_copy
+  WITH gv:globals, octx:val, ictx:val, c:State
+  PRE [ _out OF (tptr (Tstruct _env_md_ctx_st noattr)),
+        _in OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
+      PROP (c <> Allocated; c <> Raw)
+      LOCAL (gvars gv; temp _out octx; temp _in ictx)
+      SEP (MDCTX c ictx; EVP_of c; MDCTX Allocated octx; mm_inv gv; ERRGV gv)
+  POST [ tint] EX rv:_,
+       PROP ()
+       LOCAL (temp ret_temp rv)
+       SEP (if Val.eq rv nullval then MDCTX Raw octx 
+            else (!!(rv=Vint Int.one) && MDCTX c octx);
+            ERRGV gv; mm_inv gv; MDCTX c ictx; EVP_of c).
+
+(*The spec for EVP_Digest_SPEC  does not mention any concepts used
   in the definitions of the five MDCTX predicates. Thus, we
   omit its repetition here as the subsumption proof would be trivial anyway.
   Of course we should expose EVP_Digest_SPEC when we define the Gprog.*)
@@ -236,7 +263,6 @@ Axiom subsume_EVP_DigestInit_ex:
 Axiom subsume_EVP_DigestInit:
       subsume_funspec (snd EVP_DigestInit_SPEC) (snd EVP_DigestInit_ASPEC).
 
-
 Axiom subsume_EVP_DigestUpdate:
       subsume_funspec (snd EVP_DigestUpdate_SPEC) (snd EVP_DigestUpdate_ASPEC).
 
@@ -245,6 +271,12 @@ Axiom subsume_EVP_DigestFinal_ex:
 
 Axiom subsume_EVP_DigestFinal:
       subsume_funspec (snd EVP_DigestFinal_SPEC) (snd EVP_DigestFinal_ASPEC).
+
+Axiom subsume_EVP_MD_CTX_copy_ex:
+      subsume_funspec (snd EVP_MD_CTX_copy_ex_SPEC) (snd EVP_MD_CTX_copy_ex_ASPEC).
+
+Axiom subsume_EVP_MD_CTX_copy:
+      subsume_funspec (snd EVP_MD_CTX_copy_SPEC) (snd EVP_MD_CTX_copy_ASPEC).
 
 (*The subsumes lemmas should be moved to the proof / instance of this module type - 
   in module types, we should only expose a Gprog that containing (only) the abtract specs*)
@@ -291,7 +323,7 @@ Definition MDCTXHashed (DC: MD_with_content) (d p:val): mpred :=
 Definition MDCTXFull D d p: mpred := EX md:val,
   EVP_MD_CTX_NNnode Ews (d,(md,(nullval,nullval))) p *
   OPENSSL_malloc_token 16 p *
-  postFin Ews (ctx_size_of_MD D) md *
+  postFin Ews D md *
   OPENSSL_malloc_token (ctx_size_of_MD D) md.
 
 Definition MDCTX (s: State): val -> mpred :=
@@ -306,10 +338,10 @@ Definition MDCTX (s: State): val -> mpred :=
 Lemma RawAllocated: forall p, MDCTX Raw p |-- MDCTX Allocated p.
 Proof. intros; simpl. unfold MDCTXRaw, MDCTXAllocated, CTX_NULL. cancel. Qed.
 
-(*Axiom EmptyFull: forall D d p, MDCTX (Empty D d) p |-- MDCTX (Full D d) p.*)
 Lemma HashedFull: forall DC d p, MDCTX (Hashed DC d) p |-- MDCTX (Full (__EVP_MD DC) d) p.
 Proof. intros; simpl. unfold MDCTXHashed, MDCTXFull, EVP_MD_CTX_NNnode.
-  Intros md; Exists md. sep_apply (MD_StateFIN DC md). entailer!. Qed.
+  Intros md; Exists md. (* sep_apply (MD_StateFIN DC md). entailer!. *)
+  destruct DC. simpl. unfold postFin, MD_state. Intros c. Exists c. entailer!. Qed.
 
 Lemma Empty_HashedIni: forall D d p, MDCTX (Empty D d) p |-- MDCTX (Hashed (INI D) d) p.
 Proof. intros; simpl. unfold MDCTXHashed, MDCTXEmpty. simpl; trivial. Qed.
@@ -334,12 +366,241 @@ Proof. intros; simpl. unfold MDCTXFull, EVP_MD_CTX_NNnode; Intros md.
 Lemma Full_isptr: forall D d p, MDCTX (Full D d) p |-- !! isptr p.
 Proof. intros; simpl. unfold MDCTXFull, EVP_MD_CTX_NNnode; Intros md. entailer!. Qed.
 
+Definition EVP_of (c: State): mpred :=
+  match c with
+  Allocated => FF
+| Raw => emp
+| Empty D d => EVP_MD_rep D d
+| Hashed DC d => EVP_MD_rep (__EVP_MD DC) d
+| Full D d => EVP_MD_rep D d
+  end.
+
 Definition EVP_MD_CTX_init_ASPEC := DECLARE _EVP_MD_CTX_init
    WITH ctx:val
    PRE [ _ctx OF tptr (Tstruct _env_md_ctx_st noattr) ]
        PROP () LOCAL (temp _ctx ctx) SEP (MDCTX Allocated ctx)
    POST [ tvoid ]
        PROP () LOCAL () SEP (MDCTX Raw ctx).
+
+Definition EVP_MD_CTX_copy_ASPEC := DECLARE _EVP_MD_CTX_copy
+  WITH gv:globals, octx:val, ictx:val, c:State
+  PRE [ _out OF (tptr (Tstruct _env_md_ctx_st noattr)),
+        _in OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
+      PROP (c <> Allocated; c <> Raw)
+      LOCAL (gvars gv; temp _out octx; temp _in ictx)
+      SEP (MDCTX c ictx; EVP_of c; MDCTX Allocated octx; mm_inv gv; ERRGV gv)
+  POST [ tint] EX rv:_,
+       PROP ()
+       LOCAL (temp ret_temp rv)
+       SEP (if Val.eq rv nullval then MDCTX Raw octx 
+            else (!!(rv=Vint Int.one) && MDCTX c octx);
+            ERRGV gv; mm_inv gv; MDCTX c ictx; EVP_of c).
+
+Lemma subsume_EVP_MD_CTX_copy:
+      subsume_funspec (snd EVP_MD_CTX_copy_SPEC) (snd EVP_MD_CTX_copy_ASPEC).
+Proof.
+apply NDsubsume_subsume.
+{ split; reflexivity. }
+split3; auto.
+intros [[[gv octx] ictx] c]. specialize WA_WORD_nonneg; intros WAW.
+destruct c; Intros.
++ (*Allocated*) congruence.
++ (*Raw*) congruence.
++ (*Empty*) clear H H0.
+  replace_SEP 0 (MDCTXEmpty D d ictx) by entailer!.
+  unfold MDCTXEmpty; Intros md.
+  replace_SEP 5 (MDCTXAllocated octx) by entailer!.
+  unfold MDCTXAllocated; Intros.
+  unfold EVP_of, EVP_MD_rep; Intros dsh dvals. rename H into Rsh; rename H0 into SZ.
+  rewrite data_at_isptr with (p:=d); Intros.
+  rewrite match_EVP_MD_getctxsize'; Intros; rename H into CTSZ.
+  unfold MD_state, data_block; Intros c. rename H into C.
+  Exists (gv, octx, ictx, Ews, cp_default Ews d md nullval dsh dvals Ews c (Int.repr (ctx_size_of_MD D)))
+         (OPENSSL_malloc_token 16 ictx * OPENSSL_malloc_token (ctx_size_of_MD D) md *
+           match_EVP_MD D dvals * OPENSSL_malloc_token 16 octx).
+  apply andp_right; auto.
+  - old_go_lower.
+    rewrite C; simpl; entailer!. cancel.
+  - apply prop_right. simplify_Delta. Intros rv; Exists rv. old_go_lower.
+    Exists dsh dvals.
+    Intros; subst. entailer!. rewrite sepcon_comm, distrib_orp_sepcon.
+    apply orp_left. 
+    * Intros. subst. rewrite if_true by trivial.
+      unfold MDCTXEmpty, MDCTXRaw, CTX_NULL, MD_state, EVP_MD_CTX_NNnode, data_block; cancel.
+      Exists md c. rewrite C; simpl; entailer!.
+    * Intros buf; subst. rewrite if_false by discriminate.
+      unfold MDCTXEmpty, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode, match_EVP_MD.
+      Exists buf md. entailer!. unfold MD_state, data_block.
+      Exists c c. rewrite C; simpl; entailer!.
++ (*Hashed*) clear H H0.
+  replace_SEP 0 (MDCTXHashed DC d ictx) by entailer!.
+  unfold MDCTXHashed; Intros md.
+  replace_SEP 5 (MDCTXAllocated octx) by entailer!.
+  unfold MDCTXAllocated, CTX_NULL; Intros.
+  unfold EVP_of, EVP_MD_rep; Intros dsh dvals. rename H into Rsh; rename H0 into SZ.
+  rewrite data_at_isptr with (p:=d); Intros.
+  rewrite match_EVP_MD_getctxsize'; Intros; rename H into CTSZ.
+  unfold MD_state; Intros c; rename H into C. rename H0 into REP.
+  Exists (gv, octx, ictx, Ews, cp_default Ews d md nullval dsh dvals Ews c (Int.repr (ctx_size_of_MD (__EVP_MD DC))))
+         (OPENSSL_malloc_token 16 ictx * OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) md *
+           match_EVP_MD (__EVP_MD DC) dvals * OPENSSL_malloc_token 16 octx).
+  apply andp_right; auto.
+  - old_go_lower. entailer!. unfold data_block. rewrite C; trivial.
+  - apply prop_right. simplify_Delta. Intros rv; Exists rv. old_go_lower.
+    Intros; subst. entailer!. rewrite sepcon_comm, distrib_orp_sepcon.
+    apply orp_left. 
+    * Intros. subst. rewrite if_true by trivial. Exists dsh dvals; entailer!.
+      unfold MDCTXHashed, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode.
+      Exists md. entailer!. unfold MD_state, data_block.
+      Exists c. rewrite C; simpl; entailer!.
+    * Intros buf; subst. rewrite if_false by discriminate. Exists dsh dvals; entailer!.
+      unfold MDCTXHashed, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode.
+      Exists buf md. entailer!. unfold MD_state, data_block.
+      Exists c c. rewrite C; simpl; entailer!.
++ (*Full*) clear H H0.
+  replace_SEP 0 (MDCTXFull D d ictx) by entailer!.
+  unfold MDCTXFull; Intros md.
+  replace_SEP 5 (MDCTXAllocated octx) by entailer!.
+  unfold MDCTXAllocated, CTX_NULL; Intros.
+  unfold EVP_of, EVP_MD_rep; Intros dsh dvals. rename H into Rsh; rename H0 into SZ.
+  rewrite data_at_isptr with (p:=d); Intros.
+  rewrite match_EVP_MD_getctxsize'; Intros; rename H into CTSZ.
+  unfold MD_state, data_block; Intros.
+  unfold postFin, MD_state. Intros finbytes. rename H into C(*; rename H0 into R*).
+  Exists (gv, octx, ictx, Ews, cp_default Ews d md nullval dsh dvals Ews finbytes (Int.repr (ctx_size_of_MD D)))
+         (OPENSSL_malloc_token 16 ictx * OPENSSL_malloc_token (ctx_size_of_MD D) md *
+           match_EVP_MD D dvals * OPENSSL_malloc_token 16 octx).
+  apply andp_right; auto.
+  - old_go_lower. entailer!. unfold data_block. rewrite C; trivial.
+  - apply prop_right. simplify_Delta. Intros rv; Exists rv. old_go_lower.
+    Intros; subst. entailer!. rewrite sepcon_comm, distrib_orp_sepcon.
+    apply orp_left. 
+    * Intros. subst. rewrite if_true by trivial. Exists dsh dvals; entailer!.
+      unfold MDCTXFull, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode.
+      Exists md. entailer!. unfold postFin, data_block.
+      Exists finbytes. rewrite C; simpl; entailer!.
+    * Intros buf; subst. rewrite if_false by discriminate. Exists dsh dvals; entailer!.
+      unfold MDCTXFull, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode.
+      Exists buf md. entailer!. unfold postFin, data_block.
+      Exists finbytes finbytes. rewrite C; simpl; entailer!.
+Time Qed. (*3.5s*)
+
+Definition EVP_MD_CTX_copy_ex_ASPEC := DECLARE _EVP_MD_CTX_copy_ex
+  WITH gv:globals, octx:val, ictx:val, c: State
+  PRE [ _out OF (tptr (Tstruct _env_md_ctx_st noattr)),
+        _in OF (tptr (Tstruct _env_md_ctx_st noattr)) ]
+      PROP (c <> Allocated; c <> Raw)
+      LOCAL (gvars gv; temp _out octx; temp _in ictx)
+      SEP (MDCTX c ictx; EVP_of c; MDCTX Raw octx; mm_inv gv; ERRGV gv)
+  POST [ tint] EX rv:_,
+       PROP ()
+       LOCAL (temp ret_temp rv)
+       SEP (if Val.eq rv nullval then MDCTX Raw octx 
+            else (!!(rv=Vint Int.one) && MDCTX c octx);
+            ERRGV gv; mm_inv gv; MDCTX c ictx; EVP_of c).
+
+Lemma subsume_EVP_MD_CTX_copy_ex:
+      subsume_funspec (snd EVP_MD_CTX_copy_ex_SPEC) (snd EVP_MD_CTX_copy_ex_ASPEC).
+Proof.
+apply NDsubsume_subsume.
+{ split; reflexivity. }
+split3; auto.
+intros [[[gv octx] ictx] c]. specialize WA_WORD_nonneg; intros WAW.
+destruct c; Intros.
++ (*Allocated*) congruence.
++ (*Raw*) congruence.
++ (*Empty*) clear H H0.
+  replace_SEP 0 (MDCTXEmpty D d ictx) by entailer!.
+  unfold MDCTXEmpty; Intros md.
+  replace_SEP 5 (MDCTXRaw octx) by entailer!.
+  unfold MDCTXRaw, CTX_NULL; Intros.
+  unfold EVP_of, EVP_MD_rep; Intros dsh dvals. rename H into Rsh; rename H0 into SZ.
+  rewrite data_at_isptr with (p:=d); Intros.
+  rewrite match_EVP_MD_getctxsize'; Intros; rename H into CTSZ.
+  unfold MD_state, data_block; Intros c. rename H into C.
+  Exists (gv, octx, ictx, copyEx_other Ews d md nullval nullval dsh dvals Ews nullval nullval nullval
+                           (Int.repr (ctx_size_of_MD D)) Ews c None)
+          (match_EVP_MD D dvals * OPENSSL_malloc_token 16 ictx * 
+           OPENSSL_malloc_token 16 octx * OPENSSL_malloc_token (ctx_size_of_MD D) md).
+  apply andp_right; auto.
+  - old_go_lower.
+    rewrite if_false. 2: destruct d; try contradiction; discriminate.
+    rewrite C; simpl; entailer!. trivial.
+  - apply prop_right. simplify_Delta. Intros rv; Exists rv. old_go_lower.
+    rewrite if_false. 2: destruct d; try contradiction; discriminate.
+    Exists dsh dvals.
+    Intros; subst. entailer!. rewrite sepcon_comm, distrib_orp_sepcon.
+    apply orp_left. 
+    * Intros. subst. rewrite if_true by trivial. cancel. 
+      unfold MDCTXEmpty, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode, match_EVP_MD.
+      Exists md. entailer!. unfold MD_state, data_block.
+      Exists c. rewrite C; simpl; entailer!.
+    * Intros buf; subst. rewrite if_false by discriminate.
+      unfold MDCTXEmpty, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode, match_EVP_MD.
+      Exists buf md. entailer!. unfold MD_state, data_block.
+      Exists c c. rewrite C; simpl; entailer!.
++ (*Hashed*) clear H H0.
+  replace_SEP 0 (MDCTXHashed DC d ictx) by entailer!.
+  unfold MDCTXHashed; Intros md.
+  replace_SEP 5 (MDCTXRaw octx) by entailer!.
+  unfold MDCTXRaw, CTX_NULL; Intros.
+  unfold EVP_of, EVP_MD_rep; Intros dsh dvals. rename H into Rsh; rename H0 into SZ.
+  rewrite data_at_isptr with (p:=d); Intros.
+  rewrite match_EVP_MD_getctxsize'; Intros; rename H into CTSZ.
+  unfold MD_state, data_block; Intros c. rename H into C.
+  Exists (gv, octx, ictx, copyEx_other Ews d md nullval nullval dsh dvals Ews nullval nullval nullval
+                           (Int.repr (ctx_size_of_MD (__EVP_MD DC))) Ews c None)
+          (match_EVP_MD (__EVP_MD DC) dvals * OPENSSL_malloc_token 16 ictx * 
+           OPENSSL_malloc_token 16 octx * OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) md).
+  apply andp_right; auto.
+  - old_go_lower.
+    rewrite if_false. 2: destruct d; try contradiction; discriminate.
+    rewrite C; simpl. entailer!. trivial.
+  - apply prop_right. simplify_Delta. Intros rv; Exists rv. old_go_lower.
+    rewrite if_false. 2: destruct d; try contradiction; discriminate.
+    Exists dsh dvals.
+    Intros; subst. entailer!. rewrite sepcon_comm, distrib_orp_sepcon.
+    apply orp_left. 
+    * Intros. subst. rewrite if_true by trivial. cancel.
+      unfold MDCTXHashed, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode, match_EVP_MD.
+      Exists md. entailer!. unfold MD_state, data_block.
+      Exists c. rewrite C; simpl; entailer!.
+    * Intros buf; subst. rewrite if_false by discriminate.
+      unfold MDCTXHashed, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode, match_EVP_MD.
+      Exists buf md. entailer!. unfold MD_state, data_block.
+      Exists c c. rewrite C; simpl; entailer!.
++ (*Full*) clear H H0.
+  replace_SEP 0 (MDCTXFull D d ictx) by entailer!.
+  unfold MDCTXFull; Intros md.
+  replace_SEP 5 (MDCTXRaw octx) by entailer!.
+  unfold MDCTXRaw, CTX_NULL; Intros.
+  unfold EVP_of, EVP_MD_rep; Intros dsh dvals. rename H into Rsh; rename H0 into SZ.
+  rewrite data_at_isptr with (p:=d); Intros.
+  rewrite match_EVP_MD_getctxsize'; Intros; rename H into CTSZ.
+  unfold MD_state, data_block; Intros.
+  unfold postFin, MD_state. Intros finbytes. rename H into C(*; rename H0 into R*).
+  Exists (gv, octx, ictx, copyEx_other Ews d md nullval nullval dsh dvals Ews nullval nullval nullval
+                           (Int.repr (ctx_size_of_MD D)) Ews finbytes None)
+          (match_EVP_MD D dvals * OPENSSL_malloc_token 16 ictx * 
+           OPENSSL_malloc_token 16 octx * OPENSSL_malloc_token (ctx_size_of_MD D) md).
+  apply andp_right; auto.
+  - old_go_lower.
+    rewrite if_false. 2: destruct d; try contradiction; discriminate.
+    (*rewrite H4; simpl.*) entailer!. unfold data_block. rewrite C; simpl; trivial.  (*need postFin to be bytes here*)
+  - apply prop_right. simplify_Delta. Intros rv; Exists rv. old_go_lower.
+    rewrite if_false. 2: destruct d; try contradiction; discriminate.
+    Exists dsh dvals.
+    Intros; subst. entailer!. rewrite sepcon_comm, distrib_orp_sepcon.
+    apply orp_left. 
+    * Intros. subst. rewrite if_true by trivial. cancel.
+      unfold MDCTXFull, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode, match_EVP_MD.
+      Exists md. entailer!. unfold postFin, MD_state, data_block. Exists finbytes.
+      rewrite C; simpl; entailer!.
+    * Intros buf; subst. rewrite if_false by discriminate.
+      unfold MDCTXFull, MDCTXRaw, CTX_NULL, EVP_MD_CTX_NNnode, match_EVP_MD.
+      Exists buf md. entailer!. unfold postFin, MD_state, data_block. Exists finbytes finbytes.
+      rewrite C; simpl; entailer!. 
+Time Qed. (*3.5s*)
 
 Definition EVP_MD_CTX_newcreate_ASPEC :=
    WITH gv:globals
@@ -380,15 +641,6 @@ Definition EVP_MD_CTX_freedestroy_ASPEC :=
 
 Definition EVP_MD_CTX_free_ASPEC := DECLARE _EVP_MD_CTX_free EVP_MD_CTX_freedestroy_ASPEC.
 Definition EVP_MD_CTX_destroy_ASPEC := DECLARE _EVP_MD_CTX_destroy EVP_MD_CTX_freedestroy_ASPEC.
-
-Definition EVP_of (c: State): mpred :=
-  match c with
-  Allocated => FF
-| Raw => emp
-| Empty D d => EVP_MD_rep D d
-| Hashed DC d => EVP_MD_rep (__EVP_MD DC) d
-| Full D d => EVP_MD_rep D d
-  end.
 
 Definition EVP_MD_CTX_cleanupreset_ASPEC :=
   WITH gv:globals, ctx:val, c: State
@@ -493,7 +745,8 @@ Definition LEAK (c:State) :mpred :=
 | Raw => emp
 | Empty D d => EX md:_, MD_state Ews (INI D) md * OPENSSL_malloc_token (ctx_size_of_MD D) md
 | Hashed DC d => EX md:_, MD_state Ews DC md * OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) md
-| Full D d => EX md:_, EX data:_, MD_state Ews (Build_MD_with_content D data) md * OPENSSL_malloc_token (ctx_size_of_MD D) md
+| Full D d => EX md:_, EX data:_, (*MD_state Ews (Build_MD_with_content D data) md*)
+                                  data_block Ews data md * OPENSSL_malloc_token (ctx_size_of_MD D) md
   end.
 
 Definition EVP_DigestInit_ASPEC := DECLARE _EVP_DigestInit
@@ -543,7 +796,7 @@ intros [[gv ctx] c]. destruct c.
   unfold MDCTXFull; Intros md.
   Exists (gv, ctx, Ews, md, Some (ctx_size_of_MD D)) (EVP_MD_rep D d * OPENSSL_malloc_token 16 ctx).
   apply andp_right; auto.
-  - old_go_lower. Exists d nullval. entailer!. apply postFin_memory_block.
+  - old_go_lower. Exists d nullval. entailer!. apply postFin_memory_block. (*apply MD_state_memoryblock.*)
   - apply prop_right. simplify_Delta. old_go_lower; unfold MDCTXRaw; entailer!.
 Qed.
 
@@ -643,7 +896,7 @@ intros [[gv ctx] c]. destruct c.
   Exists (gv, ctx, d, md, nullval, Some (ctx_size_of_MD D)) emp.
   change (`emp) with (@emp (environ->mpred) _ _); rewrite !emp_sepcon.
   apply andp_right; auto.
-  - entailer!. apply orp_right2. entailer!. apply postFin_memory_block. 
+  - entailer!. apply orp_right2. entailer!. apply postFin_memory_block. (* unfold postFin; Intros c. apply MD_state_memoryblock. *)
   - apply prop_right. simplify_Delta. entailer!. 
 Qed.
 
@@ -661,8 +914,8 @@ Exists (ctx, Ews, (t, (md, (nullval, nullval))), out, osh, sz, DC, Ews)
        (OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) md * OPENSSL_malloc_token 16 ctx).
 apply andp_right.
 + old_go_lower; entailer!.
-+ apply prop_right. simplify_Delta. old_go_lower; entailer!. Exists md; cancel.
-  unfold EVP_MD_CTX_NNnode. entailer!.
++ apply prop_right. simplify_Delta. old_go_lower; entailer. cancel.
+  unfold MDCTXFull, EVP_MD_CTX_NNnode. Exists md; entailer!.
 Qed.
 
 Lemma subsume_EVP_DigestFinal:
@@ -683,9 +936,6 @@ apply andp_right.
   unfold MDCTXRaw; cancel. 
 Qed.
 
-Parameter QQ: forall D, mddataTp D.
-Axiom PF: forall D m, postFin Ews (ctx_size_of_MD D) m = MD_state Ews (Build_MD_with_content D (QQ D)) m.
-
 Lemma subsume_EVP_DigestInit_ex:
       subsume_funspec (snd EVP_DigestInit_ex_SPEC) (snd EVP_DigestInit_ex_ASPEC).
 Proof.
@@ -693,6 +943,7 @@ apply NDsubsume_subsume.
 { split; reflexivity. }
 split3; auto.
 intros [[[[[gv ctx] t] e] T] c]. rewrite EVP_MD_rep_isptr'; Intros. rename H into SCT.
+specialize WA_WORD_nonneg; intros WAW. 
 destruct c; [ congruence | | | |]; clear H0.
 + (*Raw*)
   replace_SEP 0 (MDCTXRaw ctx * EVP_MD_rep T t) by entailer!.
@@ -722,8 +973,8 @@ destruct c; [ congruence | | | |]; clear H0.
     Exists (ctx, t, e, t, m, (nullval, nullval), T, gv, Ews, DIEC_EQ)
            (OPENSSL_malloc_token 16 ctx * mm_inv gv * OPENSSL_malloc_token (ctx_size_of_MD T) m).
     apply andp_right; auto.
-    - old_go_lower. entailer. cancel.
-      eapply derives_trans. apply MD_state_memoryblock. simpl. apply preInit_fresh_EWS.
+    - old_go_lower. entailer. cancel. 
+      eapply derives_trans. apply MD_state_memoryblock. simpl. apply preInit_fresh_EWS; rep_omega.
     - apply prop_right. Intros rv. Exists rv. simplify_Delta. unfold DIE_postMpred.
       old_go_lower; entailer!. rewrite if_false by discriminate. rewrite if_true by trivial.
       unfold MDCTXEmpty. Exists m. entailer!. 
@@ -731,16 +982,20 @@ destruct c; [ congruence | | | |]; clear H0.
   * (*d<>t, D<>T*)
     rewrite EVP_MD_rep_isptr' with (p:=d); Intros.
     unfold EVP_MD_rep at 2. Intros dsh dvals.
-    Exists (ctx, t, e, d, m, (nullval, nullval), T, gv, Ews, DIEC_NEQ (Some (dsh,dvals)) (Some (INI D)))
+    unfold MD_state. Intros bytes.
+    Exists (ctx, t, e, d, m, (nullval, nullval), T, gv, Ews, DIEC_NEQ (Some (dsh,dvals)) 
+            (Some (*(INI D)*)(D, bytes)))
            (OPENSSL_malloc_token 16 ctx * match_EVP_MD D dvals).
     apply andp_right; auto.
-    - old_go_lower. entailer. cancel. unfold EVP_MD_NNnode. entailer!.
+    - old_go_lower. entailer. cancel. unfold EVP_MD_NNnode. entailer!. (*apply MD_StateFIN.*)
+      unfold data_block. rewrite H2; simpl; trivial.
     - apply prop_right. Intros rv. Exists rv. simplify_Delta. unfold DIE_postMpred.
       old_go_lower; simpl; entailer!. 
       rewrite sepcon_assoc. rewrite sepcon_comm, ! distrib_orp_sepcon. apply orp_left.
       { Intros; subst. rewrite if_true by trivial. 
         unfold MDCTXEmpty, EVP_MD_CTX_NNnode. Exists m; entailer. cancel.
-        unfold EVP_MD_rep, EVP_MD_NNnode. Exists dsh dvals. entailer!. }
+        unfold EVP_MD_rep, EVP_MD_NNnode. Exists dsh dvals. entailer!.
+         unfold MD_state, data_block. Exists bytes. rewrite H2; simpl; entailer!. }
       { Intros md; subst. rewrite if_false by discriminate.
         rewrite OPENSSL_malloc_token_compatible' with (v:=md).
         unfold MDCTXEmpty, EVP_MD_CTX_NNnode. Exists md; entailer. cancel.
@@ -758,7 +1013,7 @@ destruct c; [ congruence | | | |]; clear H0.
            (OPENSSL_malloc_token 16 ctx * mm_inv gv * OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) m).
     apply andp_right; auto.
     - old_go_lower. entailer. cancel.
-      eapply derives_trans. apply MD_state_memoryblock. simpl. apply preInit_fresh_EWS.
+      eapply derives_trans. apply MD_state_memoryblock. simpl. apply preInit_fresh_EWS; rep_omega.
     - apply prop_right. Intros rv. Exists rv. simplify_Delta. unfold DIE_postMpred.
       old_go_lower; entailer!. rewrite if_false by discriminate. rewrite if_true by trivial.
       unfold MDCTXEmpty. Exists m. entailer!. 
@@ -766,16 +1021,20 @@ destruct c; [ congruence | | | |]; clear H0.
   * (*d<>t, D<>T*)
     rewrite EVP_MD_rep_isptr' with (p:=d); Intros.
     unfold EVP_MD_rep at 2. Intros dsh dvals.
-    Exists (ctx, t, e, d, m, (nullval, nullval), T, gv, Ews, DIEC_NEQ (Some (dsh,dvals)) (Some DC))
+    unfold MD_state; Intros bytes.
+    Exists (ctx, t, e, d, m, (nullval, nullval), T, gv, Ews, 
+            DIEC_NEQ (Some (dsh,dvals)) (Some (__EVP_MD DC,bytes)))
            (OPENSSL_malloc_token 16 ctx * match_EVP_MD (__EVP_MD DC) dvals).
     apply andp_right; auto.
-    - old_go_lower. entailer. cancel. unfold EVP_MD_NNnode. entailer!.
+    - old_go_lower. entailer. cancel. unfold EVP_MD_NNnode. entailer!. (*apply MD_StateFIN.*)
+      unfold data_block. rewrite H2; simpl; trivial.
     - apply prop_right. Intros rv. Exists rv. simplify_Delta. unfold DIE_postMpred.
       old_go_lower; simpl; entailer!. 
       rewrite sepcon_assoc. rewrite sepcon_comm, ! distrib_orp_sepcon. apply orp_left.
       { Intros; subst. rewrite if_true by trivial. 
         unfold MDCTXHashed, EVP_MD_CTX_NNnode. Exists m; entailer. cancel.
-        unfold EVP_MD_rep, EVP_MD_NNnode. Exists dsh dvals. entailer!. }
+        unfold EVP_MD_rep, EVP_MD_NNnode. Exists dsh dvals. entailer!.
+        unfold MD_state, data_block. Exists bytes. rewrite H2; simpl; entailer!. }
       { Intros md; subst. rewrite if_false by discriminate.
         rewrite OPENSSL_malloc_token_compatible' with (v:=md).
         unfold MDCTXEmpty, EVP_MD_CTX_NNnode. Exists md; entailer. cancel.
@@ -787,14 +1046,16 @@ destruct c; [ congruence | | | |]; clear H0.
   unfold MDCTXFull. Intros m.
   rewrite OPENSSL_malloc_token_compatible' with (v:=m), EVP_MD_rep_isptr' with (p:=t); Intros.
   rename H0 into SZD; rename H into MCm.
-  rewrite (PF D m).
+  unfold postFin; Intros findata.
+(*  rewrite (PF D m).*)
   destruct (Val.eq d t); Intros; subst.
   * (*d=t, D=T*)
     Exists (ctx, t, e, t, m, (nullval, nullval), T, gv, Ews, DIEC_EQ)
            (OPENSSL_malloc_token 16 ctx * mm_inv gv * OPENSSL_malloc_token (ctx_size_of_MD T) m).
     apply andp_right; auto.
-    - old_go_lower. entailer. cancel. (*postFin Ews (ctx_size_of_MD T) m |-- preInit Ews (ctx_size_of_MD T) mSearch postFin.*)
-      eapply derives_trans. apply MD_state_memoryblock. simpl. apply preInit_fresh_EWS.
+    - old_go_lower. entailer. cancel. unfold preInit, data_block. rewrite H; entailer!.
+      (*sep_apply (MD_StateFIN {| __EVP_MD := T; __content := findata |} m); simpl.
+      apply postFin_preInit.*)
     - apply prop_right. Intros rv. Exists rv. simplify_Delta. unfold DIE_postMpred.
       old_go_lower; entailer!. rewrite if_false by discriminate. rewrite if_true by trivial.
       unfold MDCTXEmpty. Exists m. entailer!. 
@@ -802,22 +1063,25 @@ destruct c; [ congruence | | | |]; clear H0.
   * (*d<>t, D<>T*)
     rewrite EVP_MD_rep_isptr' with (p:=d); Intros.
     unfold EVP_MD_rep at 2. Intros dsh dvals.
-    Exists (ctx, t, e, d, m, (nullval, nullval), T, gv, Ews, DIEC_NEQ (Some (dsh,dvals)) (Some ({| __EVP_MD := D; __content := QQ D |})))
+    Exists (ctx, t, e, d, m, (nullval, nullval), T, gv, Ews, 
+            DIEC_NEQ (Some (dsh,dvals)) (Some (D, findata) (*({| __EVP_MD := D; __content := findata |})*)))
            (OPENSSL_malloc_token 16 ctx * match_EVP_MD D dvals).
     apply andp_right; auto.
     - old_go_lower. entailer. cancel. unfold EVP_MD_NNnode. entailer!.
+      unfold data_block. (*postFin.*) rewrite H. trivial. (*Exists findata. entailer!.*)
     - apply prop_right. Intros rv. Exists rv. simplify_Delta. unfold DIE_postMpred.
       old_go_lower; simpl; entailer!.
       rewrite sepcon_assoc. rewrite sepcon_comm, ! distrib_orp_sepcon. apply orp_left.
       { Intros; subst. rewrite if_true by trivial. 
-        unfold MDCTXFull, EVP_MD_CTX_NNnode. Exists m; entailer. rewrite (PF D m). cancel.
-        unfold EVP_MD_rep, EVP_MD_NNnode. Exists dsh dvals. entailer!. }
+        unfold MDCTXFull, EVP_MD_CTX_NNnode. Exists m; entailer. cancel.
+        unfold EVP_MD_rep, EVP_MD_NNnode. Exists dsh dvals. entailer!.
+        unfold postFin, data_block. Exists findata; rewrite H; simpl. entailer!. }
       { Intros md; subst. rewrite if_false by discriminate.
         rewrite OPENSSL_malloc_token_compatible' with (v:=md).
         unfold MDCTXEmpty, EVP_MD_CTX_NNnode. Exists md; entailer. cancel.
         rewrite if_false by trivial.
         unfold EVP_MD_rep, EVP_MD_NNnode. Exists dsh dvals. entailer!. }
-Qed.
+Time Qed.
 
 Lemma subsume_EVP_DigestInit:
       subsume_funspec (snd EVP_DigestInit_SPEC) (snd EVP_DigestInit_ASPEC).
@@ -886,9 +1150,9 @@ destruct c.
 + (*Full*) 
   replace_SEP 0 (MDCTXFull D d ctx) by entailer!. 
   unfold MDCTXFull; Intros md.
-  rewrite (PF D md).
+  unfold postFin; Intros findata. 
   Exists (ctx, t, T, gv, Ews) 
-         (OPENSSL_malloc_token 16 ctx * MD_state Ews {| __EVP_MD := D; __content := QQ D |} md * 
+         (OPENSSL_malloc_token 16 ctx * data_block Ews findata md (*MD_state Ews {| __EVP_MD := D; __content := findata |} md*) * 
           OPENSSL_malloc_token (ctx_size_of_MD D) md).
   apply andp_right; auto.
   - old_go_lower. entailer!.
@@ -897,11 +1161,11 @@ destruct c.
     rewrite sepcon_comm, distrib_orp_sepcon. apply orp_left.
     * Intros; subst. rewrite if_true by trivial.
       Exists md; unfold MDCTXRaw, CTX_NULL. entailer!.
-      Exists (QQ D). cancel.
+      Exists findata. cancel.
     * Intros m; subst. rewrite if_false by discriminate. entailer!.
       rewrite OPENSSL_malloc_token_compatible' with (v:=m); Intros.
       Exists md. unfold MDCTXEmpty, EVP_MD_CTX_NNnode. entailer!.
-      Exists (QQ D) m; entailer!.
+      Exists findata m; entailer!.
 Qed.
 
 End EVP_MD_CTX_Protocol.

@@ -367,7 +367,7 @@ TWEETNACL_FILES = \
   verif_verify.v
 
 FIPSDIGEST_FILES = \
-  mem.v thread_none.v digest.v digests.v \
+  vstlib.v mem.v thread_none.v digest.v digests.v \
   digest_model.v spec_digest_base.v spec_mem.v verif_mem.v \
   spec_digest.v verif_digest.v verif_digests.v \
   digest_protocol_spec.v

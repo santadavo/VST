@@ -189,8 +189,8 @@ Definition EVP_DigestFinal_ex_SPEC := DECLARE _EVP_DigestFinal_ex
        DC:MD_with_content, mdsh:share
   PRE [ _ctx OF tptr (Tstruct _env_md_ctx_st noattr),
         _md_out OF tptr tuchar, _size OF tptr tuint]
-      PROP (readable_share sh; writable_share osh; writable_share mdsh;
-            0 <= ctx_size_of_MD (__EVP_MD DC) <= Int.max_unsigned)
+      PROP (readable_share sh; writable_share osh; writable_share mdsh(*;
+            0 <= ctx_size_of_MD (__EVP_MD DC) <= Int.max_unsigned*))
       LOCAL (temp _ctx ctx; temp _md_out out; temp _size sz )
       SEP (data_at sh (Tstruct _env_md_ctx_st noattr) CTX ctx;
             MD_state mdsh DC (mddata_of_ctx CTX);
@@ -201,7 +201,7 @@ Definition EVP_DigestFinal_ex_SPEC := DECLARE _EVP_DigestFinal_ex
        PROP ()
        LOCAL (temp ret_temp (Vint Int.one))
        SEP (data_at sh (Tstruct _env_md_ctx_st noattr) CTX ctx;
-              postFin mdsh (ctx_size_of_MD (__EVP_MD DC)) (mddata_of_ctx CTX);
+              postFin mdsh (__EVP_MD DC) (mddata_of_ctx CTX);
               EVP_MD_rep (__EVP_MD DC) (type_of_ctx CTX); 
               if Val.eq sz nullval then emp else data_at Ews tuint (Vint (Int.repr (md_size_of_MD (__EVP_MD DC)))) sz;
               data_block osh (FIN DC) out).
@@ -225,7 +225,7 @@ Definition EVP_Digest_SPEC := DECLARE _EVP_Digest
   PRE [_data OF tptr tvoid, _count OF tuint, _out_md OF (tptr tuchar),
         _out_size OF (tptr tuint), _type OF (tptr (Tstruct _env_md_st noattr)),
         _impl OF (tptr (Tstruct _engine_st noattr)) ]
-      PROP (4 <= ctx_size_of_MD D <= Int.max_unsigned - (WA + WORD) - 8;
+      PROP ((*4 <= ctx_size_of_MD D <= Int.max_unsigned - (WA + WORD) - 8;*)
             readable_share dsh; writable_share osh; UpdateSideconditions (INI D) Data (Int.unsigned cnt))
       LOCAL (gvars gv; temp _data d; temp _count (Vint cnt);
              temp _out_md md; temp _out_size sz; temp _type t; temp _impl e)
@@ -271,7 +271,7 @@ Variant copyEx_cases :=
 | copyEx_indigestNull: forall (ish:share) (md pv1 pv2 :val), copyEx_cases
 | copyEx_other: forall (ish:share) (d md pv1 pv2:val) (dsh:share) 
                       (vals : reptype (Tstruct _env_md_st noattr))
-                      (osh:share) (d' md' pv1': val) (ctxsz:int) (imdsh:share) (idata: list int)
+                      (osh:share) (d' md' pv1': val) (ctxsz:int) (imdsh:share) (idata: list byte)
                 (pp: option (share * reptype (Tstruct _env_md_st noattr) * int)), copyEx_cases.
 
 (*require that d'=null implies md'=null - otherwise, cleanup wouldn't know how much to free (sanity invariant)*)
@@ -283,12 +283,12 @@ match c with
 | copyEx_other ish d md pv1 pv2 dsh vals osh d' md' pv1' ctxsz imdsh idata pp =>
        !!(isptr octx /\ readable_share ish /\
           readable_share dsh /\ writable_share osh /\ pv1=nullval /\ is_pointer_or_null pv2 /\
-          get_ctxsize vals = Vint ctxsz /\ 4 <= Int.unsigned ctxsz <= Int.max_unsigned - (WA + WORD) - 8/\
+          get_ctxsize vals = Vint ctxsz /\ 4 <= Int.unsigned ctxsz <= Int.max_unsigned - (WA + WORD) - 8 /\
           readable_share imdsh)
        && EVP_MD_CTX_NNnode ish (d, (md, (pv1, pv2))) ictx *
           data_at dsh (Tstruct _env_md_st noattr) vals d * 
           EVP_MD_CTX_NNnode osh (d', (md', (pv1', nullval))) octx *
-          data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vint idata) md * mm_inv gv *
+          data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vubyte idata) md * mm_inv gv *
           if Val.eq d d' 
           then !! (pp=None) (* /\ malloc_compatible (Int.unsigned ctxsz) md')*)
                && OPENSSL_malloc_token (Int.unsigned ctxsz) md' * memory_block Ews (Int.unsigned ctxsz) md'
@@ -307,13 +307,13 @@ match c with
   copyEx_ictxNull => !!(rv=Vint Int.zero) && emp
 | copyEx_indigestNull ish md pv1 pv2 => !!(rv=Vint Int.zero) && data_at ish (Tstruct _env_md_ctx_st noattr) (nullval, (md, (pv1, pv2))) ictx
 | copyEx_other ish d md pv1 pv2 dsh vals osh d' md' pv1' ctxsz imdsh idata pp =>
-       data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vint idata) md *
+       data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vubyte idata) md *
        data_at dsh (Tstruct _env_md_st noattr) vals d * mm_inv gv *
        data_at ish (Tstruct _env_md_ctx_st noattr) (d, (md, (nullval, pv2))) ictx *
        if Val.eq d d'
        then !!(rv=Vint Int.one)
             && OPENSSL_malloc_token (Int.unsigned ctxsz) md' *
-               data_at Ews (tarray tuchar (Int.unsigned ctxsz)) (map Vint idata) md' *
+               data_at Ews (tarray tuchar (Int.unsigned ctxsz)) (map Vubyte idata) md' *
                data_at osh (Tstruct _env_md_ctx_st noattr) (d, (md', (Vint (Int.repr 0), pv2))) octx
        else ( (!!(rv=Vint Int.zero)
                 && match pp with
@@ -324,7 +324,7 @@ match c with
                    end *
                    data_at osh (Tstruct _env_md_ctx_st noattr) (d', (md', (pv1', nullval))) octx)
              || (EX buf:val, !!(rv=Vint Int.one) (* /\ malloc_compatible (Int.unsigned ctxsz) buf) *)&&
-                    data_at Ews (tarray tuchar (Int.unsigned ctxsz)) (map Vint idata) buf *
+                    data_at Ews (tarray tuchar (Int.unsigned ctxsz)) (map Vubyte idata) buf *
                     data_at osh (Tstruct _env_md_ctx_st noattr) (d, (buf, (Vint (Int.repr 0), pv2))) octx *
                     OPENSSL_malloc_token (Int.unsigned ctxsz) buf *
                     match pp with
@@ -352,7 +352,7 @@ Inductive copy_cases :=
                       (vals : reptype (Tstruct _env_md_st noattr)), copy_cases*)
 | cp_default: forall (ish:share) (d md pv2:val) (dsh:share) 
                       (vals : reptype (Tstruct _env_md_st noattr))
-                      (imdsh:share) (idata:list int) (ctxsz: int), copy_cases.
+                      (imdsh:share) (idata:list byte) (ctxsz: int), copy_cases.
 Definition copyPre gv (c:copy_cases) (ictx octx:val): mpred :=
 match c with 
   cp_ictxNull => !!(ictx=nullval)&&emp
@@ -369,7 +369,7 @@ match c with
           get_ctxsize vals = Vint ctxsz /\ 4 <= Int.unsigned ctxsz <= Int.max_unsigned - (WA + WORD) - 8)
        && EVP_MD_CTX_NNnode ish (d, (md, (nullval, nullval))) ictx * mm_inv gv *
           data_at dsh (Tstruct _env_md_st noattr) vals d * 
-          data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vint idata) md
+          data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vubyte idata) md
 end.
 
 Definition copyPost gv (c:copy_cases) (ictx octx rv:val) osh: mpred :=
@@ -389,13 +389,13 @@ match c with
        data_at ish (Tstruct _env_md_ctx_st noattr)
         (d, (nullval, (nullval, pv2))) ictx*)
 | cp_default ish d md pv2 dsh vals imdsh idata ctxsz => 
-   data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vint idata) md *
+   data_at imdsh (tarray tuchar (Int.unsigned ctxsz)) (map Vubyte idata) md *
    data_at dsh (Tstruct _env_md_st noattr) vals d * mm_inv gv *
    data_at ish (Tstruct _env_md_ctx_st noattr) (d, (md, (nullval, nullval))) ictx *
    ( (!! (rv = Vint Int.zero) &&
          data_at osh (Tstruct _env_md_ctx_st noattr) (nullval, (nullval, (nullval, nullval))) octx)
    || (EX buf : val, !! (rv = Vint Int.one(* /\ malloc_compatible (Int.unsigned ctxsz) buf*)) &&
-       data_at Ews (tarray tuchar (Int.unsigned ctxsz)) (map Vint idata) buf *
+       data_at Ews (tarray tuchar (Int.unsigned ctxsz)) (map Vubyte idata) buf *
        OPENSSL_malloc_token (Int.unsigned ctxsz) buf *
        data_at osh (Tstruct _env_md_ctx_st noattr) (d, (buf, (Vint (Int.repr 0), nullval))) octx) )
 end.
@@ -443,7 +443,7 @@ Definition EVP_DigestFinal_SPEC := DECLARE _EVP_DigestFinal
   PRE [ _ctx OF tptr (Tstruct _env_md_ctx_st noattr),
         _md OF tptr tuchar, _size OF tptr tuint]
       PROP (writable_share sh; writable_share osh;
-            0 <= ctx_size_of_MD (__EVP_MD DC) <= Int.max_unsigned;
+            (*0 <= ctx_size_of_MD (__EVP_MD DC) <= Int.max_unsigned;*)
             snd(snd(snd CTX))=nullval (*pv2*))
       LOCAL (gvars gv; temp _ctx ctx; temp _md out; temp _size sz )
       SEP (data_at sh (Tstruct _env_md_ctx_st noattr) CTX ctx;
@@ -485,21 +485,23 @@ Variant DigestInitExCase :=
   DIEC_EQ
 | DIEC_NEQ: option (share * reptype (Tstruct digests._env_md_st noattr)) -> 
             option (list val * EVP_MD) -> DigestInitExCase.*)
-Definition DIE_preMpred mdd (p: option MD_with_content): mpred :=
+Definition DIE_preMpred mdd (p: (*option MD_with_content*) option (EVP_MD * list byte)): mpred :=
     match p with
     | None => !!(mdd = nullval) && emp
-    | Some DC => (*!!(get_ctxsize dvals = Vint (Int.repr (ctx_size_of_MD DD)) /\ Int.ltu Int.zero sz = true) && *)
-                     MD_state Ews DC mdd (*data_at Ews (tarray tuchar (ctx_size_of_MD D)) v mdd *) *
-                     OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) mdd
+    | Some (D,v) => (*!!(get_ctxsize dvals = Vint (Int.repr (ctx_size_of_MD DD)) /\ Int.ltu Int.zero sz = true) && *)
+                     (*MD_state Ews DC mdd*) data_at Ews (tarray tuchar (ctx_size_of_MD D)) (map Vubyte v) mdd 
+                     (*postFin Ews (__EVP_MD DC) mdd *)*
+                     OPENSSL_malloc_token (ctx_size_of_MD D) mdd
     end.
 
-Definition DIE_postMpred rv d t pv mdd ctx csh T (p: option MD_with_content): mpred :=
+Definition DIE_postMpred rv d t pv mdd ctx csh T (p: option (*MD_with_content*)(EVP_MD * list byte)): mpred :=
    (!!(rv= nullval)
     && data_at csh (Tstruct _env_md_ctx_st noattr) (d,(mdd,pv)) ctx * 
        match p with
        | None => emp
-       | Some DC => MD_state Ews DC mdd (*data_at Ews (tarray tuchar (ctx_size_of_MD D)) v mdd *) *
-                        OPENSSL_malloc_token (ctx_size_of_MD (__EVP_MD DC)) mdd
+       | Some (D,v) => (*MD_state Ews DC mdd*) data_at Ews (tarray tuchar (ctx_size_of_MD D)) (map Vubyte v)  mdd 
+                    (*postFin Ews (__EVP_MD DC) mdd*) *
+                    OPENSSL_malloc_token (ctx_size_of_MD D) mdd
        end)
 || (EX m :_, !!(rv= Vint Int.one)
              && data_at csh (Tstruct _env_md_ctx_st noattr) (t, (m, pv)) ctx * 
@@ -509,7 +511,7 @@ Definition DIE_postMpred rv d t pv mdd ctx csh T (p: option MD_with_content): mp
 Variant DigestInitExCase :=
   DIEC_EQ
 | DIEC_NEQ: option (share * reptype (Tstruct digests._env_md_st noattr)) -> 
-            option MD_with_content -> DigestInitExCase.
+            option (*MD_with_content*)(EVP_MD * list byte) -> DigestInitExCase.
 
 Definition EVP_DigestInit_ex_SPEC := DECLARE _EVP_DigestInit_ex
   WITH ctx:val, t:val, e:val, d:val, mdd:val, pv: val * val, T: EVP_MD,
@@ -517,7 +519,7 @@ Definition EVP_DigestInit_ex_SPEC := DECLARE _EVP_DigestInit_ex
   PRE [ _ctx OF tptr (Tstruct _env_md_ctx_st noattr), 
         _type OF tptr (Tstruct _env_md_st noattr),
         _engine OF tptr (Tstruct _engine_st noattr) ]
-      PROP (4 <= ctx_size_of_MD T <= Int.max_unsigned- (WA + WORD) - 8; writable_share csh)
+      PROP ((*4 <= ctx_size_of_MD T <= Int.max_unsigned- (WA + WORD) - 8;*) writable_share csh)
       LOCAL (gvars gv; temp _type t; temp _ctx ctx; temp _engine e)
       SEP (ERRGV gv; EVP_MD_CTX_NNnode csh (d,(mdd,pv)) ctx; 
            EVP_MD_rep T t;
@@ -548,7 +550,7 @@ Definition EVP_DigestInit_SPEC := DECLARE _EVP_DigestInit
   WITH ctx:val, t:val, T: EVP_MD, gv:globals, csh:share
   PRE [ _ctx OF tptr (Tstruct _env_md_ctx_st noattr), 
         _type OF tptr (Tstruct _env_md_st noattr) ]
-      PROP (4 <= ctx_size_of_MD T <= Int.max_unsigned- (WA + WORD) - 8; 
+      PROP ((*4 <= ctx_size_of_MD T <= Int.max_unsigned- (WA + WORD) - 8; *)
             writable_share csh)
       LOCAL (gvars gv; temp _ctx ctx; temp _type t)
       SEP (data_at_ csh (Tstruct _env_md_ctx_st noattr) ctx; 
