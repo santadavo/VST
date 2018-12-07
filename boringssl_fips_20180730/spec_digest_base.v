@@ -1,145 +1,81 @@
 Require Export VST.floyd.proofauto.
+
 Require Import boringssl_fips_20180730.digests.
 Require Import boringssl_fips_20180730.spec_mem. (*needed (only) for parameters WA and WORD*)
 Require Export boringssl_fips_20180730.digest_model.
-
-(*General lemmas, to be moved elsewhere*)
-Lemma Valeq_Vint {A} i j (a b:A):
-      (if Val.eq (Vint i) (Vint j) then a else b) =
-      (if Int.eq i j then a else b).
-Proof. 
- remember (Int.eq i j). destruct b0.
-+ rewrite ( binop_lemmas2.int_eq_true _ _ Heqb0). rewrite if_true; trivial.
-+ remember (Val.eq (Vint i )(Vint j)) as d.
-  destruct d; trivial.
-  inversion e; subst; simpl in *.
-  specialize (int_eq_false_e j j); intuition.
-Qed. 
-
-Lemma ptr_comp_Cne_t p q (P: is_pointer_or_null p) (Q: is_pointer_or_null q): 
-      typed_true tint (force_val (sem_cmp_pp Cne p q)) <-> ~(p=q).
-Proof.
-  destruct p; destruct q; try contradiction; simpl in *; subst;
-  unfold typed_true, sem_cmp_pp; simpl; split; intros; trivial; try solve [inv H].
-+ elim H; trivial.
-+ intros N; inv N. rewrite if_true, Ptrofs.eq_true in H; trivial; inv H.
-+ destruct (eq_block b b0); subst; trivial.
-  destruct (Ptrofs.eq_dec i i0); subst; [ elim H; trivial | rewrite Ptrofs.eq_false; trivial].
-Qed.
-
-Lemma ptr_comp_Cne_t' {T} p q 
-      (H: typed_true tint (force_val (sem_cmp_pp Cne p q)))
-       (a b:T) (P: is_pointer_or_null p)
-               (Q: is_pointer_or_null q):
-      (if Val.eq p q then a else b) = b.
-Proof. apply ptr_comp_Cne_t in H; trivial.
-  rewrite if_false; trivial.
-Qed.
-
-Lemma ptr_comp_Cne_f p q (P: is_pointer_or_null p) (Q: is_pointer_or_null q): 
-      typed_false tint (force_val (sem_cmp_pp Cne p q)) <-> (p=q).
-Proof.
-  destruct p; destruct q; try contradiction; simpl in *; subst;
-  unfold typed_false, sem_cmp_pp; simpl; split; intros; trivial; try solve [inv H].
-+ destruct (eq_block b b0); [subst; simpl in H | inv H].
-  destruct (Ptrofs.eq_dec i i0); subst; trivial.
-  rewrite Ptrofs.eq_false in H; trivial; inv H. 
-+ inv H. rewrite if_true, Ptrofs.eq_true; trivial. 
-Qed.
-
-Lemma ptr_comp_Cne_f' {T} p q 
-      (H: typed_false tint (force_val (sem_cmp_pp Cne p q)))
-       (a b:T) (P: is_pointer_or_null p)
-               (Q: is_pointer_or_null q):
-      (if Val.eq p q then a else b) = a.
-Proof. apply ptr_comp_Cne_f in H; trivial.
-  rewrite if_true; trivial.
-Qed.
-
-Lemma data_at__valid_pointer {cs : compspecs} sh t p:
-  sepalg.nonidentity sh ->
-  sizeof t > 0 ->
-  @data_at_ cs sh t p |-- valid_pointer p.
-Proof. intros. unfold data_at_, field_at_. apply field_at_valid_ptr0; simpl; trivial. Qed.
-
-Lemma func_ptr'_isptr' v f: (func_ptr' f v) = ((!! isptr v) && func_ptr' f v).
-Proof. apply pred_ext; entailer!. Qed.
-
-Lemma writable_nonidentity sh (W:writable_share sh): sepalg.nonidentity sh.
-Proof. apply readable_nonidentity. apply writable_readable; trivial. Qed.
-
-Lemma semax_orp {cs Espec Delta P1 P2 Q c}
-  (HR1: @semax cs Espec Delta P1 c Q)
-  (HR2: @semax cs Espec Delta P2 c Q):
-  @semax cs Espec Delta (P1 || P2) c Q.
-Proof.
- eapply semax_pre with (P':=EX x:bool, if x then P1 else P2).
-+ old_go_lower. apply orp_left; [Exists true | Exists false]; entailer!.
-+ Intros b. destruct b; trivial.
-Qed.
-
-Lemma semax_orp_SEPx (cs : compspecs) (Espec : OracleKind)
-      (Delta : tycontext) (P : list Prop) (Q : list localdef)
-      (R1 R2 : mpred) (R:list mpred) (T : ret_assert) (c : statement)
-  (HR1 : semax Delta
-         (PROPx P (LOCALx Q (SEPx (cons R1 R)))) c T)
-  (HR2 : semax Delta
-         (PROPx P (LOCALx Q (SEPx (cons R2 R)))) c T):
-semax Delta
-  (PROPx P (LOCALx Q (SEPx (cons (orp R1 R2) R)))) c T.
-Proof.
- eapply semax_pre; [| apply (semax_orp HR1 HR2)].
- old_go_lower.
- rewrite distrib_orp_sepcon. normalize. 
-Qed.
-
-Lemma semax_orp_SEPnil cs Espec Delta P Q R1 R2 T c
-  (HR1: @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R1)) c T)
-  (HR2: @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R2)) c T):
-  @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R1 || R2)) c T.
-Proof. apply semax_orp_SEPx; trivial. Qed.
-Lemma semax_orp_SEP cs Espec Delta P Q R1 R2 R T c
-  (HR1: @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R1; R)) c T)
-  (HR2: @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP (R2; R)) c T):
-  @semax cs Espec Delta (PROP (P) LOCAL (Q) SEP ((R1 || R2); R)) c T.
-Proof. apply semax_orp_SEPx; trivial. Qed.
-
-(**************************************)
-
-
 Require Export sha.vst_lemmas. (*for definition of data_block. *)
+Require Export boringssl_fips_20180730.vstlib.
 
-Instance CompSpecs : compspecs. make_compspecs prog. Defined.
+(*Concrete states, generalizing the pair (t_struct_SHA256state_st * s256state*)
+Variant type_with_content {cs} :=
+  twc: forall (t:type), @reptype cs t -> type_with_content.
+(*
+Record type_with_content {cs} :=
+  { __type: type;
+    __values: @reptype cs __type
+  }.*)
 
-Definition EmptyGprog: funspecs:=nil.
+Definition __type {cs} (tc: @type_with_content cs): type := match tc with twc t v => t end.
+Definition __values {cs} (tc: @type_with_content cs): @reptype cs (__type tc) := match tc with twc t v => v end.
 
+(*Abstract states, generalzing s256abs*)
 Record MD_with_content :=
   { __EVP_MD : EVP_MD;
     __content : mddataTp __EVP_MD
   }.
 
-Parameter rep: MD_with_content -> list byte -> Prop.
+Parameter HashRelate: forall {cs}, MD_with_content -> @type_with_content cs -> Prop.
+(*Parameter t_struct_SHA256state_st: type.
+Parameter s256_relate: mddataTp sha256_md -> reptype t_struct_SHA256state_st -> Prop.
+Definition HashRelate (DC:MD_with_content) (SWC: type_with_content):Prop.
+Proof. destruct DC as [D c].
+destruct D.
++ (*md4*) apply False.
++ (*md5*) apply False.
++ (*sha1*) apply False.
++ (*sha224*) apply False.
++ (*sha256*) destruct SWC as [T v]. 
+             destruct (type_eq T t_struct_SHA256state_st).
+                subst. simpl in *. apply (s256_relate c v).
+                apply False.
++ (*sha384*) apply False.
++ (*sha512*) apply False.
++ (*md5_sha1*) apply False.
+Defined.*)
+
+
+Parameter ERR: val -> mpred. 
+Definition ERRGV (gv: globals) : mpred :=
+ERR (gv ___stringlit_1).
+
+Instance CompSpecs : compspecs. make_compspecs prog. Defined.
+
+Definition EmptyGprog: funspecs:=nil.
 
 (*The generalization of sha's predicate sha256state_ to other digest functions*)
-(*TDOD: replace by
-  Definition MD_state (sh:share) (DC: MD_with_content):  val -> mpred :=
-  match __EVP_MD DC with
-    sha256_md => sha256state_ sh (__content DC)
-  | _ => fun p => FF (*TODO: replace by suitable predicates for other digests*)
-  end.*)
+Definition MD_state (sh:share) (DC: MD_with_content) (v:val): mpred :=
+  EX tc:type_with_content,
+  !! (@sizeof cenv_cs (__type tc) = ctx_size_of_MD (__EVP_MD DC) /\ 
+      ctx_size_of_MD (__EVP_MD DC) < Ptrofs.modulus /\ HashRelate DC tc) &&
+  data_at sh (__type tc) (__values tc) v.
 
+(*Definition MD_state (sh:share) (DC: MD_with_content) (v:val): mpred :=
+  EX tc:type_with_content,
+  !! (@sizeof cenv_cs (__type tc) = ctx_size_of_MD (__EVP_MD DC) /\ 
+      ctx_size_of_MD (__EVP_MD DC) < Ptrofs.modulus /\ HashRelate DC tc) &&
+  data_at sh (__type tc) (__values tc) v.*)
+
+(*
 Definition MD_state (sh:share) (DC: MD_with_content) (v:val): mpred :=
   EX contents: list byte, 
   !!(Zlength contents = (ctx_size_of_MD (__EVP_MD DC)) /\
      rep DC contents) &&
-  data_block sh contents v.
+  data_block sh contents v.*)
 
 Lemma MD_state_memoryblock sh DC p:
       MD_state sh DC p |-- memory_block sh (ctx_size_of_MD (__EVP_MD DC)) p.
-Proof. unfold MD_state, data_block; Intros c. rewrite H.
-  eapply derives_trans. apply data_at_memory_block.
-  specialize (Zlength_nonneg c); intros.
-  simpl. rewrite Z.mul_1_l, Z.max_r; trivial; omega.
+Proof. unfold MD_state, data_block; Intros c; destruct c; Intros. rewrite <- H.
+  apply data_at_memory_block.
 Qed.
 
 (******* Access functions for reptype (Tstruct _env_md_ctx_st noattr) **)
@@ -221,22 +157,25 @@ Definition update_spec (D:EVP_MD):funspec :=
           SEP(data_at sh (Tstruct _env_md_ctx_st noattr) CTX ctx;
               data_block dsh data d;
               MD_state mdsh (UPD DC data len) (mddata_of_ctx CTX)).
-(*
-Definition postFin sh (n:Z) p: mpred := EX bytes:list byte, 
-           !!(0 <= n) && (*data_at sh (tarray tuchar n) (list_repeat (Z.to_nat n) (Vubyte Byte.zero)) p*)
-                data_at sh (tarray tuchar n) (map Vubyte bytes) p.*)
-Definition postFin sh D p: mpred := 
-(*  EX c:_, MD_state sh (Build_MD_with_content D c) p.*)
-  EX contents: list byte, 
-  !!(Zlength contents = (ctx_size_of_MD D)(* /\
-     rep DC contents*)) &&
-  data_block sh contents p.
+
+(*Like MD_State, but without the HashRelate clause*)
+Definition postFin {cs} sh D p: mpred := 
+(*  EX contents: list byte, 
+  !!(Zlength contents = (ctx_size_of_MD D)) &&
+  data_block sh contents p.*)
+  EX tc:type_with_content,
+  !! (@sizeof cs (__type tc) = ctx_size_of_MD D /\ ctx_size_of_MD D < Ptrofs.modulus) &&
+  data_at sh (__type tc) (__values tc) p.
+
+Lemma MD_StateFIN: forall DC md, MD_state Ews DC md |-- postFin Ews (__EVP_MD DC) md.
+Proof. intros. unfold postFin, MD_state. Intros c. Exists c. entailer!.
+Qed.
 
 Lemma postFin_memory_block sh D p: postFin sh D p |-- memory_block sh (ctx_size_of_MD D) p.
 Proof. unfold postFin. Intros bytes.
   eapply derives_trans. apply data_at_memory_block.
-  simpl in *. rewrite Z.mul_1_l, Z.max_r, H; trivial.
-  apply Zlength_nonneg.
+  simpl in *. (*rewrite Z.mul_1_l, Z.max_r, H; trivial.
+  apply Zlength_nonneg.*) rewrite <- H; trivial.
 Qed.
  
 Lemma postFin_pTN sh D md: postFin sh D md |-- !!(is_pointer_or_null md).
@@ -280,10 +219,18 @@ Lemma preInit_fresh_EWS sz m (H:0 <= sz < Ptrofs.modulus):
   memory_block Ews sz m |--preInit Ews sz m.
 Proof. unfold preInit. entailer!. eapply memory_block_data_at__tarray_tuchar; trivial.
 Qed.
-
+(*
 Lemma postFin_preInit sh D m: postFin sh D m |-- preInit sh (ctx_size_of_MD D) m.
 Proof. unfold postFin, preInit, MD_state. Intros c.
-  simpl in *. unfold data_block. rewrite H; entailer!. Qed.
+  simpl in *. unfold data_block. rewrite H; entailer!.
+   Qed.*)
+Lemma postFin_preInit sh D m: postFin sh D m |-- preInit sh (ctx_size_of_MD D) m.
+Proof. unfold postFin, preInit, MD_state. Intros swc. destruct swc as [t v]. simpl in *.
+  rewrite <- H in *; clear H. specialize (sizeof_pos t); intros. simpl in *.
+  apply andp_right. apply prop_right; omega. 
+  eapply derives_trans. apply data_at_memory_block.
+  apply memory_block_data_at__tarray_tuchar; omega.
+Qed.
 
 Definition INI (D: EVP_MD): MD_with_content :=
   let cont := EVP_MD_rec_init _ (EVPMD_record_of_EVPMD D)
