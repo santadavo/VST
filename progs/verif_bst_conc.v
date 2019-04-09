@@ -97,30 +97,29 @@ Eval hnf in reptype (nested_field_type t_struct_tree_t [StructField _lock]).
 
 
 
-Definition ltree tl lsh p lock (t : tree val) :=
+Definition ltree tl lsh p lock :=
   !!(field_compatible t_struct_tree_t nil p) &&
   (field_at lsh t_struct_tree_t [StructField _lock] lock p *
-   lock_inv lsh lock (tl t (p, lock))).
+   lock_inv lsh lock (tl (p, lock))).
 
 
 Fixpoint node_rep tl lsh (t: tree val) (tp: val) : mpred := (*tree strored in p correctly, see struct tree, representation in memory*)
  match t with
  | E => !!(tp=nullval) && emp
  | T a x v b => !! (Int.min_signed <= x <= Int.max_signed /\ tc_val (tptr Tvoid) v) && EX pa:val, EX pb:val, EX locka : val, EX lockb : val,
-  EX ta: tree val, EX tb: tree val,
     data_at Tsh t_struct_tree (Vint (Int.repr x),(v,(pa,pb))) tp *
-    ltree tl lsh pa locka ta * ltree tl lsh pb lockb tb
+    ltree tl lsh pa locka * ltree tl lsh pb lockb
  end.
  
 Definition t_lock_pred tl t lsh p lock :=
 EX tp : val, (data_at Tsh (tptr t_struct_tree) tp p * node_rep tl lsh t tp *
   malloc_token Tsh (t_struct_tree_t) p *
  malloc_token Tsh (tlock) lock).
- 
-(*Definition t_lock_pred' tl lsh p lock  := EX t : tree val, t_lock_pred tl lsh t p lock.*)
 
-Definition t_lock_pred_uncurry t lsh (tl : ((val * val) -> mpred)) := fun '(p, lock) => 
-  t_lock_pred tl lsh t p lock.
+(*Definition t_lock_pred' tl lsh p lock  := EX t : tree val, t_lock_pred tl lsh t p lock.
+
+Definition t_lock_pred_uncurry (t: tree val) lsh (tl : (tree val -> (val * val) -> mpred)) := fun t '(p, lock) => 
+  t_lock_pred tl t lsh p lock.
 
 Definition t_lock_pred'' t lsh :=  HORec (t_lock_pred_uncurry t lsh).
 
@@ -131,8 +130,9 @@ Definition ltree_final lsh p lock (t : tree val) :=
   !!(field_compatible t_struct_tree_t nil p) &&
   (field_at lsh t_struct_tree_t [StructField _lock] lock p *
    lock_inv lsh lock (t_lock_pred''' t lsh p lock)).
-   
-(*Definition t_lock_pred' tl lsh p lock  := EX t : tree val, t_lock_pred tl lsh t p lock.
+*)   
+Definition t_lock_pred' tl lsh p lock  := 
+      EX t : tree val, t_lock_pred tl t lsh p lock.
 
 Definition t_lock_pred_uncurry lsh (tl : ((val * val) -> mpred)) := fun '(p, lock) => 
   t_lock_pred' tl lsh p lock.
@@ -146,21 +146,22 @@ Definition ltree_final lsh p lock :=
   !!(field_compatible t_struct_tree_t nil p) &&
   (field_at lsh t_struct_tree_t [StructField _lock] lock p *
    lock_inv lsh lock (t_lock_pred''' lsh p lock)).
-*)
 
 
-Theorem t_lock_pred_def : forall t lsh p lock, 
-  t_lock_pred''' t lsh p lock = t_lock_pred (t_lock_pred'' t lsh) lsh t p lock.
+
+Theorem t_lock_pred_def : forall lsh p lock, 
+  t_lock_pred''' lsh p lock = t_lock_pred' (t_lock_pred'' lsh) lsh p lock.
 Proof.
 Admitted.
    
 
 
-Definition treebox_rep (t: tree val) (b: val) :=
+(*Definition treebox_rep (t: tree val) (b: val) :=
  EX p: val, data_at Tsh (tptr t_struct_tree_t) p b.
+ *)
  
-Definition nodebox_rep (sh : share) (lock : val) (t: tree val) (nb: val) :=
- EX np: val, data_at Tsh (tptr (t_struct_tree_t)) np nb * ltree_final sh np lock t.
+Definition nodebox_rep (sh : share) (lock : val) (nb: val) :=
+ EX np: val, data_at Tsh (tptr (t_struct_tree_t)) np nb * ltree_final sh np lock.
  
 (*maybe I should add the treebox_rep in the ltree definition *)
 Definition insert_spec' :=
@@ -170,11 +171,11 @@ Definition insert_spec' :=
         _value OF (tptr Tvoid)  ]
    PROP (readable_share sh; Int.min_signed <= x <= Int.max_signed; is_pointer_or_null v)
    LOCAL (temp _t b; temp _x (Vint (Int.repr x)); temp _value v)
-   SEP (nodebox_rep sh lock t b)
+   SEP (nodebox_rep sh lock b)
   POST [ Tvoid ]
    PROP ()
    LOCAL ()
-   SEP (nodebox_rep sh lock (insert x v t) b).
+   SEP (nodebox_rep sh lock b).
 Definition insert_spec prog := DECLARE (ext_link_prog prog "insert") insert_spec'.    
 
 
