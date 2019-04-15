@@ -8,6 +8,17 @@ Require Import VST.floyd.library.
 Instance CompSpecs : compspecs. make_compspecs prog. Defined.
 Definition Vprog : varspecs. mk_varspecs prog. Defined.
 
+
+Definition acquire_spec := DECLARE _acquire acquire_spec.
+Definition release_spec := DECLARE _release release_spec.
+Definition makelock_spec := DECLARE _makelock (makelock_spec _).
+Definition freelock_spec := DECLARE _freelock (freelock_spec _).
+Definition makecond_spec := DECLARE _makecond (makecond_spec _).
+Definition freecond_spec := DECLARE _freecond (freecond_spec _).
+Definition wait_spec := DECLARE _waitcond (wait2_spec _).
+Definition signal_spec := DECLARE _signalcond (signal_spec _).
+
+
 Definition t_struct_tree := Tstruct _tree noattr.
 Definition t_struct_tree_t := Tstruct _tree_t noattr.
 
@@ -325,6 +336,8 @@ Definition treebox_free_spec :=
 
 Definition Gprog : funspecs :=
     ltac:(with_library prog [
+    acquire_spec; release_spec; makelock_spec; freelock_spec;
+   makecond_spec; freecond_spec; wait_spec; signal_spec;
     mallocN_spec; freeN_spec; treebox_new_spec;
     tree_free_spec; treebox_free_spec;
     insert_spec; lookup_spec;
@@ -368,7 +381,7 @@ Definition insert_inv (b0: val) (t0: tree val) (x: Z) (v: val): environ -> mpred
 *)
 Definition insert_inv (b0: val) (t0: tree val) (x: Z) (v: val): environ -> mpred :=
   EX b: val, EX lock: val, EX lsh: share,
-  PROP()
+  PROP(readable_share lsh)
   LOCAL(temp _t b; temp _x (Vint (Int.repr x));   temp _value v)
   SEP(nodebox_rep lsh lock b).
 
@@ -494,11 +507,16 @@ Proof.
     unfold nodebox_rep at 1. Intros p1.
     forward. (* tgt=*t; *)
       unfold ltree_final. entailer!.
-    unfold ltree_final.  
-    assert_PROP
+    unfold ltree_final. Intros.  
+    (*assert_PROP
     (offset_val 4 p1 = field_address (tlock) [StructField _lock] p1).
-      1: entailer!. hint. rewrite field_address_offset.
-        hint. autorewrite with norm.  (* l=tgt->lock *)
+      1: entailer!. rewrite field_address_offset.
+         autorewrite with norm. unfold offset_val.*)
+    forward. (* l=tgt->lock *)
+    unfold t_struct_tree_t, lock_inv, t_lock_pred''', t_lock_pred'',
+    t_lock_pred_uncurry, t_lock_pred', t_lock_pred, data_at. Intros.
+    entailer!. apply H6. admit.
+    forward. (* acquire(l) *)  
     forward_if.
     + (* then clause *)
       subst p1.
