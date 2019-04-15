@@ -9,15 +9,6 @@ Instance CompSpecs : compspecs. make_compspecs prog. Defined.
 Definition Vprog : varspecs. mk_varspecs prog. Defined.
 
 
-Definition acquire_spec := DECLARE _acquire acquire_spec.
-Definition release_spec := DECLARE _release release_spec.
-Definition makelock_spec := DECLARE _makelock (makelock_spec _).
-Definition freelock_spec := DECLARE _freelock (freelock_spec _).
-Definition makecond_spec := DECLARE _makecond (makecond_spec _).
-Definition freecond_spec := DECLARE _freecond (freecond_spec _).
-Definition wait_spec := DECLARE _waitcond (wait2_spec _).
-Definition signal_spec := DECLARE _signalcond (signal_spec _).
-
 
 Definition t_struct_tree := Tstruct _tree noattr.
 Definition t_struct_tree_t := Tstruct _tree_t noattr.
@@ -333,11 +324,22 @@ Definition treebox_free_spec :=
     PROP()
     LOCAL()
     SEP (emp).
+    
+    
+Definition acquire_spec := DECLARE _acquire acquire_spec.
+Definition release_spec := DECLARE _release release_spec.
+Definition makelock_spec := DECLARE _makelock (makelock_spec _).
+Definition freelock_spec := DECLARE _freelock (freelock_spec _).
+Definition spawn_spec := DECLARE _spawn spawn_spec.
+Definition freelock2_spec := DECLARE _freelock2 (freelock2_spec _).
+Definition release2_spec := DECLARE _release2 release2_spec.
 
+(*no freelock_spec, spawn_spec, freelock2_spec, release2_spec*)
 Definition Gprog : funspecs :=
-    ltac:(with_library prog [
+    ltac:(with_library prog [acquire_spec; release_spec; makelock_spec;
+  (*
     acquire_spec; release_spec; makelock_spec; freelock_spec;
-   makecond_spec; freecond_spec; wait_spec; signal_spec;
+   makecond_spec; freecond_spec; wait_spec; signal_spec;*)
     mallocN_spec; freeN_spec; treebox_new_spec;
     tree_free_spec; treebox_free_spec;
     insert_spec; lookup_spec;
@@ -494,12 +496,13 @@ Ltac simpl_compb := first [ rewrite if_trueb by (apply Z.ltb_lt; omega)
 
 Lemma body_insert: semax_body Vprog Gprog f_insert insert_spec.
 Proof.
-  start_function.  Check semax_pre. Check semax_loop.
-  eapply semax_pre; [ (* what's semax_loop?*) 
-    | apply (semax_loop _ (insert_inv b t x v) (insert_inv b t x v) )]. (*P' = insert_inv b t x v *)
+  start_function.  
+  eapply semax_pre; [ 
+    | apply (semax_loop _ (insert_inv b t x v) (insert_inv b t x v) )]. 
+    (*P' = insert_inv b t x v *)
   * (* Precondition *)
     unfold insert_inv. 
-    Exists b lock sh. entailer. Check ramify_PPQQ.
+    Exists b lock sh. entailer. 
   * (* Loop body *)
     unfold insert_inv.
     Intros b1 lock1 sh1.
@@ -513,10 +516,11 @@ Proof.
       1: entailer!. rewrite field_address_offset.
          autorewrite with norm. unfold offset_val.*)
     forward. (* l=tgt->lock *)
-    unfold t_struct_tree_t, lock_inv, t_lock_pred''', t_lock_pred'',
-    t_lock_pred_uncurry, t_lock_pred', t_lock_pred, data_at. Intros.
-    entailer!. apply H6. admit.
-    forward. (* acquire(l) *)  
+      1: rewrite lock_inv_isptr. entailer!.
+    forward_call(lock1, sh1, ltree_final sh1 p1 lock1). (* acquire(l) *)
+      1: unfold ltree_final, data_at, field_at. lock_props. simpl. entailer!.
+      rewrite lock_inv_isptr. entailer!. admit.
+    2: unfold ltree_final. forward.
     forward_if.
     + (* then clause *)
       subst p1.
