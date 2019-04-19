@@ -137,7 +137,7 @@ Fixpoint node_rep tl lsh (t: tree val) (tp: val) : mpred := (*tree strored in p 
  end.
  
 Definition t_lock_pred tl t lsh p lock :=
-EX tp : val, (data_at Tsh (tptr t_struct_tree) tp p * node_rep tl lsh t tp *
+EX tp : val, (field_at Tsh (t_struct_tree_t) [StructField _t] tp p * node_rep tl lsh t tp *
   malloc_token Tsh (t_struct_tree_t) p *
  malloc_token Tsh (tlock) lock).
 
@@ -517,17 +517,19 @@ Proof.
          autorewrite with norm. unfold offset_val.*)
     forward. (* l=tgt->lock *)
       1: rewrite lock_inv_isptr. entailer!.
-    forward_call(lock1, sh1, ltree_final sh1 p1 lock1). (* acquire(l) *)
-      1: unfold ltree_final, data_at, field_at. lock_props. simpl. entailer!.
-      rewrite lock_inv_isptr. entailer!. admit.
-    2: unfold ltree_final. forward.
+    forward_call(lock1, sh1, 
+    t_lock_pred''' sh1 p1 lock1).   (* acquire(l) *) 
+    rewrite t_lock_pred_def at 2.  unfold t_lock_pred', t_lock_pred. Intros t1 tp.  
+    forward. (*p=tgt->t*)
     forward_if.
     + (* then clause *)
-      subst p1.
-      Time forward_call (sizeof t_struct_tree).
+      subst tp.
+      Time forward_call (sizeof t_struct_tree_t).
         1: simpl. rep_omega.
-      Intros p'. Check memory_block_data_at_.
+      Intros p1'. Check memory_block_data_at_.
       rewrite memory_block_data_at_ by auto.
+      Time forward_call (sizeof t_struct_tree_t). 
+        1: simpl. rep_omega.
       forward. (* p->key=x; *)
       simpl.
       forward. (* p->value=value; *)
