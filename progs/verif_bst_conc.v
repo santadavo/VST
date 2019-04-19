@@ -137,6 +137,7 @@ Fixpoint node_rep tl lsh (t: tree val) (tp: val) : mpred := (*tree strored in p 
  end.
  
 Definition t_lock_pred tl t lsh p lock :=
+<<<<<<< HEAD
 EX tp : val, (field_at Tsh (t_struct_tree_t) [StructField _t] tp p * node_rep tl lsh t tp *
   malloc_token Tsh (t_struct_tree_t) p *
  malloc_token Tsh (tlock) lock).
@@ -158,13 +159,55 @@ Definition ltree_final lsh p lock :=
   (field_at lsh t_struct_tree_t [StructField _lock] lock p *
    lock_inv lsh lock (t_lock_pred''' lsh p lock)).
 
-
+Lemma ltree_subp : forall P Q a b c,
+  ALL x : _, |> (P x <=> Q x) |-- |> ltree P a b c >=> |> ltree Q a b c.
+Proof.
+  intros; unfold ltree.
+  rewrite !later_andp; apply subp_andp; [apply subp_refl|].
+  rewrite !later_sepcon; apply subp_sepcon; [apply subp_refl|].
+  rewrite <- subp_later.
+  repeat intro.
+  match goal with |- predicates_hered.app_pred (?A >=> ?B) a' =>
+    change (predicates_hered.app_pred (subtypes.fash (predicates_hered.imp A B)) a') end.
+  unfold lock_inv; repeat intro.
+  destruct H3 as (b1 & ofs & ? & Hl & ?); exists b1, ofs; split; auto; split; auto.
+  intro l; specialize (Hl l); simpl in *.
+  if_tac; auto.
+  destruct Hl as [rsh Hl]; exists rsh; rewrite Hl; repeat f_equal.
+  extensionality.
+  specialize (H (b, c) _ H0).
+  apply ageable.necR_level in H2.
+  apply predicates_hered.pred_ext; intros ? []; split; auto.
+  - destruct (H a1) as [X _]; [omega|].
+    specialize (X _ (ageable.necR_refl _)); auto.
+  - destruct (H a1) as [_ X]; [omega|].
+    specialize (X _ (ageable.necR_refl _)); auto.
+Qed.
 
 Theorem t_lock_pred_def : forall lsh p lock, 
   t_lock_pred''' lsh p lock = t_lock_pred' (t_lock_pred'' lsh) lsh p lock.
 Proof.
-Admitted.
-   
+  intros.
+  unfold t_lock_pred''', t_lock_pred''.
+  etransitivity; [eapply equal_f, HORec_fold_unfold|].
+  { apply prove_HOcontractive; intros ?? (?, ?).
+    unfold t_lock_pred_uncurry.
+    unfold t_lock_pred'.
+    apply subp_exp; intros t.
+    unfold t_lock_pred.
+    apply subp_exp; intros.
+    apply subp_sepcon, subp_refl.
+    apply subp_sepcon, subp_refl.
+    apply subp_sepcon; [apply subp_refl|].
+    destruct t; simpl node_rep.
+    { apply subp_refl. }
+    rewrite !later_andp.
+    apply subp_andp; [apply subp_refl|].
+    repeat (rewrite 2later_exp' by auto; apply subp_exp; intros).
+    rewrite !later_sepcon, !sepcon_assoc; apply subp_sepcon; [apply subp_refl|].
+    apply subp_sepcon; eapply derives_trans, ltree_subp; apply allp_right; intros; eapply allp_left; rewrite eqp_later; apply derives_refl. }
+  unfold t_lock_pred_uncurry; reflexivity.
+Qed.
 
 
 Definition treebox_rep (t: tree val) (b: val) :=
@@ -516,11 +559,17 @@ Proof.
       1: entailer!. rewrite field_address_offset.
          autorewrite with norm. unfold offset_val.*)
     forward. (* l=tgt->lock *)
+<<<<<<< HEAD
       1: rewrite lock_inv_isptr. entailer!.
     forward_call(lock1, sh1, 
     t_lock_pred''' sh1 p1 lock1).   (* acquire(l) *) 
     rewrite t_lock_pred_def at 2.  unfold t_lock_pred', t_lock_pred. Intros t1 tp.  
     forward. (*p=tgt->t*)
+=======
+    { rewrite lock_inv_isptr. entailer!. }
+    forward_call(lock1, sh1, t_lock_pred''' sh1 p1 lock1). (* acquire(l) *)
+    rewrite t_lock_pred_def.
+>>>>>>> cff36f8c099698a1061ec70b4bdb074920c8ed8d
     forward_if.
     + (* then clause *)
       subst tp.
