@@ -69,6 +69,7 @@ void insert (treebox t, int x, void *value) {
       p2->lock = l2;
       release(l2);
       p = (struct tree *) mallocN (sizeof *p);
+      tgt->t = p; 
       p->key=x; p->value=value; p->left=p1; p->right=p2;
       *t=tgt;
       release(l);
