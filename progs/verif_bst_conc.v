@@ -657,7 +657,7 @@ Proof.
           t_lock_pred. Exists (T E x v E) p'. cancel. unfold node_rep. Exists p1' p2' l1 l2. entailer!. unfold ltree. entailer!. admit.
            }
       forward. (* return; *)
-      unfold nodebox_rep. Exists p1. unfold ltree_final. entailer!. cancel. entailer!. admit.
+      unfold nodebox_rep. Exists p1. unfold ltree_final. entailer!. cancel. entailer!. admit. (*Stuck1*)
       (*apply treebox_rep_leaf. auto. auto.*)
     + (* else clause *)
       destruct t1.
@@ -684,7 +684,7 @@ Proof.
           cancel. simpl. entailer!. Exists pa pb locka lockb. cancel. }
           unfold insert_inv.
         Exists (field_address t_struct_tree [StructField _left] tp) locka sh1.
-        entailer!. simpl. unfold field_address. simpl. admit.
+        entailer!. simpl. unfold field_address. simpl. admit. (*Stuck2*)
               rewrite if_true by auto with field_compatible. auto. rep_omega.
         simpl_compb. 
         unfold insert_inv.
